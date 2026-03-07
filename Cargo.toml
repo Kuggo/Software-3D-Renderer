@@ -1,0 +1,9 @@
+[package]
+name = "Software3DRenderer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sdl2 = "*"
+spin_sleep = "1.1.1"
+bytemuck = "1.25.0"
