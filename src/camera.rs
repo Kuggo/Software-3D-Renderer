@@ -5,10 +5,12 @@ use crate::utils::*;
 use crate::renderer::Renderer;
 use crate::geometry::{Scene, Transform};
 
+
+/// Screen is responsible to show drawn pixels into a sdl2 window every frame.
 pub struct Screen {
-    pub width_pix: u32,
-    pub height_pix: u32,
-    pixel_size: u8,
+    width_pix: u32,
+    height_pix: u32,
+    pixel_size: u32,
     pixels_per_unit: f32,
 
     stride: usize,
@@ -17,9 +19,11 @@ pub struct Screen {
     canvas: WindowCanvas,
     texture: Texture<'static>,
 }
-
 impl Screen {
-    pub fn new(sdl_ctx: &mut sdl2::Sdl, width_pix: u32, height_pix: u32, pixel_size: u8,
+    /// Creates a new Screen with the given width and height in pixels, and the size of each pixel in screen space units.
+    /// The pixels_per_unit parameter determines how many pixels correspond to one unit in world space, which is used for converting world coordinates to screen coordinates.
+    /// The title parameter sets the title of the window.
+    pub fn new(sdl_ctx: &mut sdl2::Sdl, width_pix: u32, height_pix: u32, pixel_size: u32,
         pixels_per_unit: f32, title: &str,
     ) -> Result<Self, String> {
         let video = sdl_ctx.video()?;
@@ -65,6 +69,8 @@ impl Screen {
         })
     }
 
+    /// Outputs the contents of the framebuffer to the window.  
+    /// Should be called at the end of each frame
     pub fn show(&mut self) {
         self.texture.update(
             None,
@@ -76,104 +82,113 @@ impl Screen {
         self.canvas.present();
     }
 
-    pub fn get_screen_center_pix(&self) -> (i32, i32) {
-        let x = self.width_pix as i32 * self.pixel_size as i32 / 2;
-        let y = self.height_pix as i32 * self.pixel_size as i32 / 2;
+    /// Returns a reference to the SDL2 window associated with this screen.
+    pub fn get_window(&self) -> &Window {
+        self.canvas.window()
+    }
+
+    /// Returns the width of the screen in world space units, based on the pixels_per_unit setting.
+    pub fn get_width_units(&self) -> f32 {
+        self.width_pix as f32 / self.pixels_per_unit
+    }
+
+    /// Returns the coordinates of the center of the screen in pixel coordinates.
+    pub fn get_screen_center_pix(&self) -> (u32, u32) {
+        let x = self.width_pix * self.pixel_size / 2;
+        let y = self.height_pix * self.pixel_size / 2;
         (x, y)
     }
 
-    pub fn in_bounds(&self, x: i32, y: i32) -> bool {
-        -(self.width_pix as i32) / 2 <= x && x < (self.width_pix / 2) as i32 &&
-            -(self.height_pix as i32) / 2 <= y && y < (self.height_pix / 2) as i32
+    /// Checks if the given pixel coordinates are within the bounds of the screen.
+    pub fn in_bounds(&self, x: usize, y: usize) -> bool {
+        x < self.width_pix as usize && y < self.height_pix as usize
     }
 
-    pub fn begin_frame(&mut self) {
-        self.framebuffer.fill(0x00000000); // black
+    pub fn begin_frame(&mut self, color: Color) {
+        self.framebuffer.fill(color.to_argb()); // black
     }
     
+    /// Converts world space coordinates to pixel coordinates on the screen.
+    /// The center of the screen corresponds to (0, 0) in world space.
     pub fn world_to_screen_coords(&self, coord: Vec2) -> (usize, usize) {
         let screen_x = (self.width_pix as i32 / 2) + (coord.x * self.pixels_per_unit) as i32;
         let screen_y = (self.height_pix as i32 / 2) - (coord.y * self.pixels_per_unit) as i32;
         (screen_x as usize, screen_y as usize)
     }
 
-    pub fn draw_pixel(&mut self, x: usize, y: usize, color: u32) {
-        if x >= self.width_pix as usize || y >= self.height_pix as usize {
-            return;
+    /// Draws a pixel at the given coordinates (if they are valid) with the specified color.
+    pub fn draw_pixel(&mut self, x: usize, y: usize, color: Color) {
+        if self.in_bounds(x, y) {
+            self.framebuffer[y * self.stride + x] = color.to_argb();
         }
-
-        self.framebuffer[y * self.stride + x] = color;
     }
 
-    /*pub fn draw_hline(&mut self, x0: usize, x1: usize, y: usize, color: u32) {
-        let (x0, x1) = self.world_to_screen_coords(x0, );
-        let y = (y + (self.height_pix as i32 / 2)) as usize;
-        let row = &mut self.framebuffer[y * self.stride .. (y+1) * self.stride];
-        row[x0..x1].fill(color);
-    }*/
-
 }
 
 
+/// The Camera represents the viewer's perspective in the 3D scene. 
+/// It holds the position and orientation of the camera, as well as the field of view (FOV) for perspective projection.
 pub struct Camera {
-    pub screen: Screen,
     pub scene: Scene,
     pub transform: Transform,
-    pub fov: f32,
+    pub pitch: f32,
+    pub yaw: f32,
+    pub roll: f32,
+    fov: f32,
 }
-
 impl Camera {
-    pub fn new(screen: Screen, scene: Scene, transform: Transform, fov: f32) -> Self {
+    /// Creates a new Camera for a scene, with some initial transform, and field of view (FOV).
+    pub fn new(scene: Scene, transform: Transform, fov: f32) -> Self {
         let camera = Camera {
-            screen,
             scene,
             transform,
+            pitch: 0.0,
+            yaw: 0.0,
+            roll: 0.0,
             fov,
         };
         camera
     }
 
-    pub fn get_focal_length(&mut self) -> f32 {
+    /// Calculates the focal length (projection variable) based on the camera's field of view (FOV)
+    /// and the width of the screen in world space units.
+    pub fn get_focal_length(&mut self, screen_width: f32) -> f32 {
         let fov = self.fov.to_radians();
-        let width = self.screen.width_pix as f32 / self.screen.pixels_per_unit as f32;
-        let focal_length = (width / 2.0) / (fov / 2.0).tan();
+        let focal_length = (screen_width / 2.0) / (fov / 2.0).tan();
         focal_length
     }
 
+    /// Adjusts the camera's field of view (FOV) by a given zoom amount, within a reasonable range.
     pub fn zoom(&mut self, zoom: f32) {
         self.fov = (self.fov + zoom).clamp(30.0, 160.0);
     }
 
-    pub fn get_window(&self) -> &Window {
-        self.screen.canvas.window()
-    }
-
+    /// Returns the forward direction vector of the camera, based on its current rotation.
     pub fn forward(&self) -> Vec3 {
         self.transform.rot.rotate_vec3(Vec3::NZ_AXIS)
     }
 
+    /// Returns the up direction vector of the camera, based on its current rotation.
     pub fn up(&self) -> Vec3 {
         self.transform.rot.rotate_vec3(Vec3::Y_AXIS)
     }
 
+    /// Returns the right direction vector of the camera, based on its current rotation.
     pub fn right(&self) -> Vec3 {
         self.transform.rot.rotate_vec3(Vec3::X_AXIS)
     }
 
-    pub fn rotate(&mut self, yaw: f32, pitch: f32) {
-        let yaw_q = Quat::from_axis_angle(Vec3::Y_AXIS, yaw);
-        let pitch_q = Quat::from_axis_angle(self.right(), pitch);
-
-        self.transform.rot = pitch_q.mul(&yaw_q).mul(&self.transform.rot).normalize();
+    /// Updates the camera's transform rotation based on its current yaw, pitch, and roll angles.
+    /// This operation should be done frequently to avoid accumulation of float errors in the rotation quaternion.
+    pub fn update_transform(&mut self) {
+        let yaw_q = Quat::from_axis_angle(Vec3::Y_AXIS, self.yaw.to_radians());
+        let pitch_q = Quat::from_axis_angle(self.right(), self.pitch.to_radians());
+        let roll_q = Quat::from_axis_angle(self.forward(), self.roll.to_radians());
+        self.transform.rot = roll_q.mul(&pitch_q).mul(&yaw_q).normalize();
     }
 
-    pub fn roll(&mut self, angle: f32) {
-        let forward = self.forward();
-        let q = Quat::from_axis_angle(forward, angle);
-
-        self.transform.rot = q.mul(&self.transform.rot).normalize();
-    }
-
+    /// Moves the camera in a direction relative to where it's currently facing.
+    /// The movement is FPS style: meaning that the camera moves in the horizontal plane.
     pub fn move_rel_to_facing(&mut self, direction: Vec3) {
         let forward = self.transform.rot.rotate_vec3(Vec3::Z_AXIS);
         let flat_forward = Vec3::new(forward.x, 0.0, forward.z).normalize(); // project forward onto horizontal plane
@@ -186,17 +201,18 @@ impl Camera {
         self.transform.pos = self.transform.pos.add( &horizontal.add(&vertical) );
     }
 
-    pub fn world_to_camera(&self, p: Vec3) -> Vec3 {
-        p.sub(&self.transform.pos)
-    }
+    /// Renders the current scene from the camera's perspective onto the given screen.  
+    /// This method clears the previous frame, builds a new one, and displays it on the screen.  
+    /// It takes ownership of the screen for the duration of the frame rendering, 
+    /// and returns it back at the end as the proper rust way.
+    pub fn draw_frame_to_screen<'a>(&mut self, screen: &'a mut Screen) -> &'a mut Screen {
+        screen.begin_frame(Color::BLACK);
 
-    pub fn draw_frame(&mut self) {
-        self.screen.begin_frame();
-
-        let mut renderer = Renderer::new();
+        let mut renderer = Renderer::new_to_screen(screen);
         renderer.render_scene_from_camera(self);
 
-        self.screen.show();
+        screen.show();
+        screen
     }
 
 }

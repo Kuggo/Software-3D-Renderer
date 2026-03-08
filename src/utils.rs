@@ -1,4 +1,4 @@
-
+use std::cmp::PartialEq;
 
 const FP_TOLERANCE: f32 = 0.0001;
 
@@ -9,42 +9,90 @@ pub struct Vec2 {
 }
 impl Vec2 {
     pub const ZERO: Vec2 = Vec2 {x: 0.0, y: 0.0};
+    pub const IDENTITY: Vec2 = Vec2 {x: 1.0, y: 1.0};
+    pub const X_AXIS: Vec2 = Vec2 {x: 1.0, y: 0.0};
+    pub const Y_AXIS: Vec2 = Vec2 {x: 0.0, y: 1.0};
+    pub const NX_AXIS: Vec2 = Vec2 {x: -1.0, y: 0.0};
+    pub const NY_AXIS: Vec2 = Vec2 {x: 0.0, y: -1.0};
 
+    /// Create a new Vec2 with the given x and y components.
     pub fn new(x: f32, y: f32) -> Self {
         Self {x, y}
     }
 
+    /// Create a Vec2 from polar coordinates (length and angle in radians).
+    pub fn from_polar_coords(len: f32, angle: f32) -> Self {
+        Self::new(len * angle.cos(), len * angle.sin())
+    }
+    
+    /// Checks if this Vec2 is approximately equal to another Vec2, 
+    /// within a small tolerance to account for floating-point precision issues.  
+    /// This tolerance is applied component-wise.
     pub fn equals_fp(&self, other: &Vec2) -> bool {
         (self.x - other.x).abs() < FP_TOLERANCE &&
             (self.y - other.y).abs() < FP_TOLERANCE
     }
 
+    /// Calculate the dot product of this Vec2 with another Vec2.
     pub fn dot(&self, other: &Vec2) -> f32 {
         self.x * other.x + self.y * other.y
     }
-
+    
+    /// Calculate the 2D cross product (also known as the perp dot product) of this Vec2 with another Vec2.
+    pub fn cross(&self, other: &Vec2) -> f32 {
+        self.x * other.y - self.y * other.x
+    }
+    
+    /// Add this Vec2 to another Vec2, returning the resulting Vec2.
     pub fn add(&self, other: &Vec2) -> Vec2 {
         Vec2::new(self.x + other.x, self.y + other.y)
     }
 
+    /// Subtract another Vec2 from this Vec2, returning the resulting Vec2.
     pub fn sub(&self, other: &Vec2) -> Vec2 {
         Vec2::new(self.x - other.x, self.y - other.y)
     }
 
+    /// Scale this Vec2 by a scalar value, returning the resulting Vec2.
     pub fn scale(&self, scalar: f32) -> Vec2 {
         Vec2::new(self.x * scalar, self.y * scalar)
     }
 
+    /// Returns the Hadamard product (component-wise multiplication) of this Vec2 with another Vec2.
+    pub fn scale_vec(&self, other: &Vec2) -> Vec2 {
+        Vec2::new(
+            self.x * other.x,
+            self.y * other.y,
+        )
+    }
+    
+    /// Calculate the length (magnitude) of this Vec2.
     pub fn length(&self) -> f32 {
         (self.x * self.x + self.y * self.y).sqrt()
     }
 
+    /// Calculate the Manhattan distance between this Vec2 and another Vec2.
+    pub fn manhattan(&self, other: &Vec2) -> f32 {
+        (self.x - other.x).abs() + (self.y - other.y).abs()
+    }
+    
+    /// Normalize this Vec2 to have a length of 1, returning the resulting Vec2.
+    /// If the length of the Vec2 is 0, returns a zero vector to avoid division by zero.
     pub fn normalize(&self) -> Vec2 {
         let l = self.length();
         if l == 0.0 {
             return Vec2::new(0.0, 0.0);
         }
         Vec2::new(self.x / l, self.y / l)
+    }
+
+    /// Linearly interpolate between this Vec2 and another Vec2 by a factor of t.  
+    /// t should be in the range [0.0, 1.0].
+    pub fn lerp(a: &Vec2, b: &Vec2, t: f32) -> Vec2 {
+        Vec2 {
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t,
+        }
     }
 }
 
@@ -65,21 +113,22 @@ impl Vec3 {
     pub const NY_AXIS: Vec3 = Vec3 {x: 0.0, y: -1.0, z: 0.0};
     pub const NZ_AXIS: Vec3 = Vec3 {x: 0.0, y: 0.0, z: -1.0};
 
+    /// Create a new Vec3 with the given x, y, and z components.
     pub fn new(x: f32, y: f32, z: f32) -> Vec3 {
         Vec3 {x, y, z }
     }
 
+    /// Create a Vec3 from polar coordinates (length, pitch, and yaw in radians).
     pub fn from_polar_coords(len: f32, pitch: f32, yaw: f32) -> Vec3 {
         Vec3::new(
             len * pitch.cos() * yaw.cos(),
             len * pitch.sin(),
             len * pitch.cos() * yaw.sin())
     }
-
-    pub fn null(&self) -> bool {
-        self.x == 0.0 && self.y == 0.0 && self.z == 0.0
-    }
-
+    
+    /// Checks if this Vec3 is approximately equal to another Vec3, 
+    /// within a small tolerance to account for floating-point precision issues.  
+    /// This tolerance is applied component-wise.
     pub fn equals_fp(&self, other: &Vec3) -> bool {
         (self.x - other.x).abs() < FP_TOLERANCE &&
             (self.y - other.y).abs() < FP_TOLERANCE &&
@@ -87,10 +136,12 @@ impl Vec3 {
 
     }
 
+    /// Calculate the dot product of this Vec3 with another Vec3.
     pub fn dot(&self, other: &Vec3) -> f32 {
         self.x * other.x + self.y * other.y + self.z * other.z
     }
 
+    /// Calculate the cross product of this Vec3 with another Vec3, returning the resulting Vec3.
     pub fn cross(&self, other: &Vec3) -> Vec3 {
         Vec3::new(
             self.y * other.z - self.z * other.y,
@@ -98,19 +149,22 @@ impl Vec3 {
             self.x * other.y - self.y * other.x)
     }
 
+    /// Add this Vec3 to another Vec3, returning the resulting Vec3.
     pub fn add(&self, other: &Vec3) -> Vec3 {
         Vec3::new(self.x + other.x, self.y + other.y, self.z + other.z)
     }
 
+    /// Subtract another Vec3 from this Vec3, returning the resulting Vec3.
     pub fn sub(&self, other: &Vec3) -> Vec3 {
         Vec3::new(self.x - other.x, self.y - other.y, self.z - other.z)
     }
 
+    /// Scale this Vec3 by a scalar value, returning the resulting Vec3.
     pub fn scale(&self, scalar: f32) -> Vec3 {
         Vec3::new(self.x * scalar, self.y * scalar, self.z * scalar)
     }
 
-    /// Hadamard product (component-wise multiplication)
+    /// Returns the Hadamard product (component-wise multiplication) of this Vec3 with another Vec3.
     pub fn scale_vec(&self, other: &Vec3) -> Vec3 {
         Vec3::new(
             self.x * other.x,
@@ -119,14 +173,18 @@ impl Vec3 {
         )
     }
 
+    /// Calculate the length (magnitude) of this Vec3.
     pub fn length(&self) -> f32 {
         (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
     }
 
+    /// Calculate the Manhattan distance between this Vec3 and another Vec3.
     pub fn manhattan(&self, other: &Vec3) -> f32 {
         (self.x - other.x).abs() + (self.y - other.y).abs() + (self.z - other.z).abs()
     }
 
+    /// Normalize this Vec3 to have a length of 1, returning the resulting Vec3.
+    /// If the length of the Vec3 is 0, returns a zero vector to avoid division by zero.
     pub fn normalize(&self) -> Vec3 {
         let l = self.length();
         if l == 0.0 {
@@ -135,6 +193,17 @@ impl Vec3 {
         Vec3::new(self.x / l, self.y / l, self.z / l)
     }
 
+    /// Linearly interpolate between this Vec3 and another Vec3 by a factor of t.  
+    /// t should be in the range [0.0, 1.0].
+    pub fn lerp(a: &Vec3, b: &Vec3, t: f32) -> Vec3 {
+        Vec3 {
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t,
+            z: a.z + (b.z - a.z) * t,
+        }
+    }
+
+    /// Convert this Vec3 to polar coordinates (length, pitch, and yaw in radians).
     pub fn polar(&self) -> (f32, f32, f32) {
         let len = self.length();
         if len == 0.0 {
@@ -145,7 +214,9 @@ impl Vec3 {
         (len, pitch, yaw)
     }
 
-    pub fn colinear(&self, other: &Vec3) -> bool {
+    /// Check if this Vec3 is collinear with another Vec3, meaning they lie on the same line.
+    /// If one of them is a zero vector it returns true.
+    pub fn collinear(&self, other: &Vec3) -> bool {
         let l1 = self.length();
         let l2 = other.length();
         if l1 == 0.0 || l2 == 0.0 {
@@ -156,13 +227,15 @@ impl Vec3 {
         n1.equals_fp(&n2)
     }
 
+    /// Calculate the angle in radians between this Vec3 and another Vec3.
     pub fn angle(&self, other: &Vec3) -> f32 {
-        if self.null() || other.null() {
+        if *self == Self::ZERO || *other == Self::ZERO {
             return 0.0;
         }
         (self.dot(&other) / (self.length() * other.length())).acos()
     }
 
+    /// Project this Vec3 onto another Vec3, returning the resulting Vec3.
     pub fn project_onto(&self, other: &Vec3) -> Vec3 {
         let l = other.length();
         if l == 0.0 {
@@ -171,6 +244,7 @@ impl Vec3 {
         other.scale(self.dot(other) / l)
     }
 
+    /// Returns the component of this Vec3 that is orthogonal (perpendicular) to another Vec3.
     pub fn orthogonal_component(&self, other: &Vec3) -> Vec3 {
         self.sub(&self.project_onto(&other))
     }
@@ -276,6 +350,7 @@ impl Quat {
 }
 
 
+/// A simple RGBA color struct with values in the range [0.0, 1.0].
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Color {
     r: f32,
@@ -290,6 +365,7 @@ impl Color {
     pub const GREEN : Color = Color {r: 0.0, g: 1.0, b: 0.0, a: 1.0};
     pub const BLUE : Color = Color {r: 0.0, g: 0.0, b: 1.0, a: 1.0};
 
+    /// Create a new color from RGBA values in the range [0, 255].
     pub fn new(r: u8, g: u8, b: u8, a: u8) -> Color {
         Color {
             r: r as f32 / 255.0,
@@ -299,22 +375,7 @@ impl Color {
         }
     }
 
-    pub fn to_argb(self) -> u32 {
-        ((255u32) << 24)
-            | (((self.r * 255.0) as u32) << 16)
-            | (((self.g * 255.0) as u32) << 8)
-            | ((self.b * 255.0) as u32)
-    }
-
-    pub fn sdl_format(&self) -> sdl2::pixels::Color {
-        sdl2::pixels::Color::RGBA(
-            (self.r * 255.0) as u8,
-            (self.g * 255.0) as u8,
-            (self.b * 255.0) as u8,
-            (self.a * 255.0) as u8
-        )
-    }
-
+    /// Create a new color from sdl2::pixels::Color, which has RGBA values in the range [0, 255].
     pub fn from_sdl(color: sdl2::pixels::Color) -> Color {
         Color {
             r: color.r as f32 / 255.0,
@@ -324,6 +385,16 @@ impl Color {
         }
     }
 
+    /// Convert the color to a 32-bit ARGB format (0xAARRGGBB).  
+    /// This format is used by SDL2 for texture manipulation.
+    pub fn to_argb(self) -> u32 {
+        ((255u32) << 24)
+            | (((self.r * 255.0) as u32) << 16)
+            | (((self.g * 255.0) as u32) << 8)
+            | ((self.b * 255.0) as u32)
+    }
+
+    /// Alpha blend this color with another color, returning the resulting color.
     pub fn alpha_blend(&self, other: Color) -> Color {
         let c = self.a + other.a;
         let a1 = self.a / c;
@@ -333,6 +404,17 @@ impl Color {
             g: self.g * a1 + other.g * a2,
             b: self.b * a1 + other.b * a2,
             a: c,
+        }
+    }
+    
+    /// Linearly interpolate between this color and another color by a factor of t.  
+    /// t should be in the range [0.0, 1.0].
+    pub fn lerp(a: Color, b: Color, t: f32) -> Color {
+        Color {
+            r: a.r + (b.r - a.r) * t,
+            g: a.g + (b.g - a.g) * t,
+            b: a.b + (b.b - a.b) * t,
+            a: a.a + (b.a - a.a) * t,
         }
     }
 }

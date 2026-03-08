@@ -15,8 +15,9 @@ mod renderer;
 pub use crate::camera::{Camera, Screen};
 use crate::geometry::{Mesh, Object, Primitive, Scene, Transform, Triangle, Vertex};
 
-// Data clump
-struct Settings {
+
+/// ControlSettings holds the various sensitivity and speed settings for the controls.
+struct ControlSettings {
     mouse_sensitivity: f32,
     scroll_sensitivity: f32,
     zoom_sensitivity: f32,
@@ -77,8 +78,12 @@ impl Key {
 }
 
 /// Handles user inputs and updates the camera accordingly. Returns true if the program should stop.
-fn user_inputs(sdl_ctx: &mut sdl2::Sdl, cfg: &Settings, camera: &mut Camera, key_states: &mut Keys, dt: f32) -> bool {
-    let (center_x, center_y) = camera.screen.get_screen_center_pix();
+/// Events are already frame dependent, so dt should not be for most events.
+/// However, for movement, dt is used to make movement frame rate independent.
+fn user_inputs(sdl_ctx: &mut sdl2::Sdl, cfg: &ControlSettings, camera: &mut Camera,
+               screen: &Screen, key_states: &mut Keys, dt: f32
+) -> bool {
+    let (center_x, center_y) = screen.get_screen_center_pix();
 
     let mut events = sdl_ctx.event_pump().unwrap();
     for event in events.poll_iter() {
@@ -110,13 +115,14 @@ fn user_inputs(sdl_ctx: &mut sdl2::Sdl, cfg: &Settings, camera: &mut Camera, key
             },
 
             Event::MouseMotion { xrel, yrel, .. } => {
-                let yaw = xrel as f32 * cfg.mouse_sensitivity;
-                let pitch = yrel as f32 * cfg.mouse_sensitivity;
+                let delta_yaw = xrel as f32 * cfg.mouse_sensitivity;
+                let delta_pitch = yrel as f32 * cfg.mouse_sensitivity;
 
-                camera.rotate(yaw, pitch);
+                camera.yaw += delta_yaw;
+                camera.pitch = (camera.pitch + delta_pitch).clamp(-89.0, 89.0);
 
                 // setting the mouse to the center
-                sdl_ctx.mouse().warp_mouse_in_window(camera.get_window(), center_x, center_y);
+                sdl_ctx.mouse().warp_mouse_in_window(screen.get_window(), center_x as i32, center_y as i32);
             },
 
             Event::MouseWheel { y, .. } => {
@@ -126,7 +132,7 @@ fn user_inputs(sdl_ctx: &mut sdl2::Sdl, cfg: &Settings, camera: &mut Camera, key
                 }
                 else {
                     let roll = (y as f32) * cfg.scroll_sensitivity;
-                    camera.roll(roll);
+                    camera.roll += roll;
                 }
             },
 
@@ -154,13 +160,15 @@ fn user_inputs(sdl_ctx: &mut sdl2::Sdl, cfg: &Settings, camera: &mut Camera, key
     let mov = Vec3::new(mov_x, mov_y, mov_z).normalize().scale(dt * cfg.camera_speed);
 
     camera.move_rel_to_facing(mov);
+    camera.update_transform();
 
     false
 }
 
 
 
-//
+/// Creates a simple scene with a cube in the center.
+/// The cube is made up of 12 triangles (2 for each face).
 fn get_cube_scene() -> Scene {
     let cube_vertices = [
         Vertex { pos: Vec3::new(-1.0, -1.0, -1.0) },
@@ -204,41 +212,42 @@ fn main() -> Result<(), String> {
     const SCREEN_WIDTH_PIX: u32 = 128;
     const SCREEN_HEIGHT_PIX: u32 = 72;
     const PIXELS_PER_UNIT: f32 = 200.0;
-    const PIXEL_SIZE: u8 = 10;
+    const PIXEL_SIZE: u32 = 20;
     let target_fps: f32 = 30.0;
 
     let camera_pos = Vec3::ZERO;
     let camera_rot = Quat::IDENTITY;
     let fov: f32 = 90.0;    // in degrees
 
-    let mouse_sensitivity: f32 = 0.001;
-    let scroll_sensitivity: f32 = 0.1;
+    let mouse_sensitivity: f32 = 0.05;
+    let scroll_sensitivity: f32 = 3.0;
     let zoom_sensitivity: f32 = 2.0;
     let camera_speed: f32 = 2.0;
 
     let scene = get_cube_scene();
 
     // Setup and Rendering loop
-    let config = Settings { mouse_sensitivity, scroll_sensitivity, zoom_sensitivity, camera_speed };
+    let config = ControlSettings { mouse_sensitivity, scroll_sensitivity, zoom_sensitivity, camera_speed };
 
     let mut sdl_ctx: sdl2::Sdl = sdl2::init()?;
-    let screen = Screen::new(&mut sdl_ctx, SCREEN_WIDTH_PIX, SCREEN_HEIGHT_PIX, PIXEL_SIZE, PIXELS_PER_UNIT, "3D Renderer")?;
+    let mut screen = &mut Screen::new(&mut sdl_ctx, SCREEN_WIDTH_PIX, SCREEN_HEIGHT_PIX, PIXEL_SIZE, PIXELS_PER_UNIT, "3D Renderer")?;
     let cam_transform = Transform::new(camera_pos, camera_rot, Vec3::IDENTITY);
-    let mut camera = Camera::new(screen, scene, cam_transform, fov);
+    let mut camera = Camera::new(scene, cam_transform, fov);
 
     let mut key_states: Keys = [false; 256];
 
     let target_dt = Duration::from_secs_f64(1.0 / target_fps as f64);
     let mut next_frame = Instant::now();
+    let mut last_print = next_frame;
     let mut dt = target_dt.as_secs_f32();
     loop {
         let frame_start = Instant::now();
 
         // rendering
-        camera.draw_frame();
+        screen = camera.draw_frame_to_screen(screen);
 
         // input
-        let stop = user_inputs(&mut sdl_ctx, &config, &mut camera, &mut key_states, dt);
+        let stop = user_inputs(&mut sdl_ctx, &config, &mut camera, &screen, &mut key_states, dt);
         if stop { break; }
 
         next_frame += target_dt;
@@ -251,14 +260,11 @@ fn main() -> Result<(), String> {
             next_frame = now;
         }
 
-        dt = frame_start.elapsed().as_secs_f32();
-        println!("FPS: {:.1}", 1.0 / dt);
-        //println!("Camera Pos: ({:.2}, {:.2}, {:.2})", camera.transform.pos.x, camera.transform.pos.y, camera.transform.pos.z);
-        let (p,y,r) = camera.transform.rot.to_euler();
-        //println!("Camera Rot: pitch: {:.2}, yaw: {:.2}, roll: {:.2}", p.to_degrees(), y.to_degrees(), r.to_degrees());
-        //let fl = camera.get_focal_length();
-        //println!("Camera FOV: {:.2}, focal_length {:.2}", camera.fov, fl);
-        //println!("-----------------------------")
+        if last_print.elapsed().as_secs_f32() >= 1.0 {
+            last_print = now;
+            dt = frame_start.elapsed().as_secs_f32();
+            println!("FPS: {:.1}", 1.0 / dt);
+        }
     }
     Ok(())
 }
