@@ -1,24 +1,48 @@
 use crate::utils::*;
 
 
+pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+
 /// Vertex containing attributes used to render primitives.
 #[derive(Debug, Copy, PartialEq, Clone)]
 pub struct Vertex {
     pub pos: Vec3,
+    pub color: Color,
     //pub normal: Vec3,
     //pub uv: Vec2,
 }
 impl Vertex {
     /// Creates a new Vertex with the given attributes.
-    pub fn new(pos: Vec3) -> Self {
-        Self { pos }
+    pub fn new(pos: Vec3, color: Color) -> Self {
+        Self { pos, color }
     }
 
-    /// returns the linear interpolation between two vertices `a` and `b` by a factor `t`.
+    /// Returns the linear interpolation between two vertices `a` and `b` by a factor `t`.
     /// t should be in the range [0.0, 1.0].
     pub fn lerp(a: &Vertex, b: &Vertex, t: f32) -> Vertex {
         let pos = Vec3::lerp(&a.pos, &b.pos, t);
-        Vertex { pos }
+        let color = Color::lerp(&a.color, &b.color, t);
+        Vertex { pos, color }
+    }
+
+    /// Returns the perspective-correct linear interpolation between two vertices `a` and `b` by a factor `t`.
+    /// This is used to interpolate vertex attributes in screen space after perspective projection, to avoid distortion.
+    /// t should be in the range [0.0, 1.0].
+    pub fn zlerp(a: &Vertex, b: &Vertex, t: f32) -> Vertex {
+        let z = 1.0 / lerp(1.0/a.pos.z, 1.0/b.pos.z, t);
+
+        let pos = Vec3::lerp(
+            &a.pos.scale(1.0/a.pos.z), &b.pos.scale(1.0/a.pos.z), t
+        ).scale(z);
+
+        let color = Color::lerp(
+            &a.color, &b.color, t
+        ).scale(z);
+
+        Vertex { pos, color }
     }
 }
 
@@ -28,8 +52,8 @@ impl Vertex {
 #[derive(Debug, Copy, PartialEq, Clone)]
 pub enum Primitive {
     Triangle(Triangle),
-    //Line(Line),
-    //Point(Point),
+    Line(Vertex, Vertex),
+    Point(Vertex),
 }
 #[derive(Debug, Copy, PartialEq, Clone)]
 pub struct Triangle {
@@ -76,6 +100,7 @@ impl Triangle {
 }
 
 
+
 // Objects and Scene
 
 /// A Scene is a collection of objects.
@@ -90,7 +115,7 @@ pub struct Object {
 }
 
 /// A Mesh is a collection of primitives (triangles, lines, points) that define an object's surface.
-pub struct Mesh {   // TODO make vertices be indirect
+pub struct Mesh {
     pub primitives: Vec<Primitive>,
 }
 

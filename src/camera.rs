@@ -2,14 +2,14 @@ use sdl2::render::{Texture, WindowCanvas};
 use sdl2::video::{Window};
 use sdl2::pixels::PixelFormatEnum;
 use crate::utils::*;
-use crate::renderer::Renderer;
+use crate::renderer::{InterpMode, Renderer};
 use crate::geometry::{Scene, Transform};
 
 
 /// Screen is responsible to show drawn pixels into a sdl2 window every frame.
 pub struct Screen {
-    width_pix: u32,
-    height_pix: u32,
+    pub width_pix: u32,
+    pub height_pix: u32,
     pixel_size: u32,
     pixels_per_unit: f32,
 
@@ -110,16 +110,46 @@ impl Screen {
     
     /// Converts world space coordinates to pixel coordinates on the screen.
     /// The center of the screen corresponds to (0, 0) in world space.
-    pub fn world_to_screen_coords(&self, coord: Vec2) -> (usize, usize) {
+    pub fn world_to_screen_coords(&self, coord: Vec2) -> Pixel {
         let screen_x = (self.width_pix as i32 / 2) + (coord.x * self.pixels_per_unit) as i32;
         let screen_y = (self.height_pix as i32 / 2) - (coord.y * self.pixels_per_unit) as i32;
-        (screen_x as usize, screen_y as usize)
+        Pixel::new(screen_x, screen_y)
     }
 
     /// Draws a pixel at the given coordinates (if they are valid) with the specified color.
-    pub fn draw_pixel(&mut self, x: usize, y: usize, color: Color) {
+    pub fn draw_pixel(&mut self, pixel: Pixel, color: &Color) {
+        let x = pixel.x as usize;
+        let y = pixel.y as usize;
         if self.in_bounds(x, y) {
             self.framebuffer[y * self.stride + x] = color.to_argb();
+        }
+    }
+
+    /// Draws a horizontal span (inclusive endpoints) using a shader function sampled per pixel.
+    /// `func(t)` receives t in [0, 1] along the directed segment x0 -> x1.
+    pub fn draw_h_line<F: FnMut(f32) -> Color>(&mut self, y: i32, x0: i32, x1: i32, mut func: F) {
+        let (left, right);
+        if y < 0 || y >= self.height_pix as i32 {
+            return;
+        }
+        (left, right) = (x0.min(x1), x0.max(x1));
+        if left < 0 || right >= self.width_pix as i32 {
+            return;
+        }
+
+        let idx = y as usize * self.stride;
+        let row = &mut self.framebuffer[idx + (left as usize) ..= idx + (right as usize)];
+
+        let span = (x1 - x0) as f32;
+        if span == 0.0 {
+            row.fill(func(0.0).to_argb());
+            return;
+        }
+
+        for (i, pixel) in row.iter_mut().enumerate() {
+            let x = left + i as i32;
+            let t = (x - x0) as f32 / span;
+            *pixel = func(t).to_argb();
         }
     }
 
@@ -152,10 +182,9 @@ impl Camera {
 
     /// Calculates the focal length (projection variable) based on the camera's field of view (FOV)
     /// and the width of the screen in world space units.
-    pub fn get_focal_length(&mut self, screen_width: f32) -> f32 {
+    pub fn get_focal_length(&self, screen_width: f32) -> f32 {
         let fov = self.fov.to_radians();
-        let focal_length = (screen_width / 2.0) / (fov / 2.0).tan();
-        focal_length
+        (screen_width / 2.0) / (fov / 2.0).tan()
     }
 
     /// Adjusts the camera's field of view (FOV) by a given zoom amount, within a reasonable range.
@@ -205,10 +234,10 @@ impl Camera {
     /// This method clears the previous frame, builds a new one, and displays it on the screen.  
     /// It takes ownership of the screen for the duration of the frame rendering, 
     /// and returns it back at the end as the proper rust way.
-    pub fn draw_frame_to_screen<'a>(&mut self, screen: &'a mut Screen) -> &'a mut Screen {
+    pub fn draw_frame_to_screen<'a>(&self, screen: &'a mut Screen) -> &'a mut Screen {
         screen.begin_frame(Color::BLACK);
 
-        let mut renderer = Renderer::new_to_screen(screen);
+        let mut renderer = Renderer::new_to_screen(screen, InterpMode::Linear);
         renderer.render_scene_from_camera(self);
 
         screen.show();
@@ -216,5 +245,4 @@ impl Camera {
     }
 
 }
-
 

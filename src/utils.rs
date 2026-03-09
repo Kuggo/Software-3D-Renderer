@@ -1,4 +1,5 @@
 use std::cmp::PartialEq;
+use crate::geometry::lerp;
 
 const FP_TOLERANCE: f32 = 0.0001;
 
@@ -94,6 +95,62 @@ impl Vec2 {
             y: a.y + (b.y - a.y) * t,
         }
     }
+}
+
+
+/// A simple struct representing a pixel coordinate on the screen, with integer x and y values.
+/// Despite x,y are i32 for convenience in calculations, but they are meant to be non-negative.
+#[derive(Debug, Copy, PartialEq, Clone)]
+pub struct Pixel {
+    pub x: i32,
+    pub y: i32,
+}
+impl Pixel {
+    pub const ZERO: Pixel = Pixel {x: 0, y: 0};
+    pub const IDENTITY: Pixel = Pixel {x: 1, y: 1};
+
+    /// Create a new Pixel with the given x and y coordinates.
+    pub fn new(x: i32, y: i32) -> Self {
+        Self {x, y}
+    }
+
+    pub fn from_vec2(vec: Vec2) -> Pixel {
+        Pixel::new(vec.x.round() as i32, vec.y.round() as i32)
+    }
+
+    /// Add this Pixel to another Pixel, returning the resulting Pixel.
+    pub fn add(&self, other: &Pixel) -> Pixel {
+        Pixel::new(self.x + other.x, self.y + other.y)
+    }
+
+     /// Subtract another Pixel from this Pixel, returning the resulting Pixel.
+    pub fn sub(&self, other: &Pixel) -> Pixel {
+        Pixel::new(self.x - other.x, self.y - other.y)
+    }
+
+    /// Scale this Pixel by a scalar value, returning the resulting Pixel.
+    pub fn scale(&self, scalar: f32) -> Pixel {
+        Pixel::new((self.x as f32 * scalar).round() as i32, (self.y as f32 * scalar).round() as i32)
+    }
+
+    /// Returns the Hadamard product (component-wise multiplication) of this Pixel with a Vec2.
+    pub fn scale_vec(&self, vec2: &Vec2) -> Pixel {
+        Pixel::new((self.x as f32 * vec2.x).round() as i32, (self.y as f32 * vec2.y).round() as i32)
+    }
+
+    /// Calculate the Manhattan distance between this Pixel and another Pixel.
+    pub fn manhattan(&self, other: &Pixel) -> i32 {
+        (self.x - other.x).abs() + (self.y - other.y).abs()
+    }
+
+    /// Linearly interpolate between this Pixel and another Pixel by a factor of t.
+    pub fn lerp(a: &Pixel, b: &Pixel, t: f32) -> Pixel {
+        Pixel {
+            x: (a.x as f32 + (b.x as f32 - a.x as f32) * t).round() as i32,
+            y: (a.y as f32 + (b.y as f32 - a.y as f32) * t).round() as i32,
+        }
+    }
+
 }
 
 
@@ -197,9 +254,9 @@ impl Vec3 {
     /// t should be in the range [0.0, 1.0].
     pub fn lerp(a: &Vec3, b: &Vec3, t: f32) -> Vec3 {
         Vec3 {
-            x: a.x + (b.x - a.x) * t,
-            y: a.y + (b.y - a.y) * t,
-            z: a.z + (b.z - a.z) * t,
+            x: lerp(a.x, b.x, t),
+            y: lerp(a.y, b.y, t),
+            z: lerp(a.z, b.z, t),
         }
     }
 
@@ -406,15 +463,26 @@ impl Color {
             a: c,
         }
     }
+
+    /// Scale the color by a scalar value, returning the resulting color.
+    /// This operation can result in saturated colors.
+    pub fn scale(&self, p0: f32) -> Color {
+        Color {
+            r: self.r * p0,
+            g: self.g * p0,
+            b: self.b * p0,
+            a: self.a * p0,
+        }
+    }
     
     /// Linearly interpolate between this color and another color by a factor of t.  
     /// t should be in the range [0.0, 1.0].
-    pub fn lerp(a: Color, b: Color, t: f32) -> Color {
+    pub fn lerp(a: &Color, b: &Color, t: f32) -> Color {
         Color {
-            r: a.r + (b.r - a.r) * t,
-            g: a.g + (b.g - a.g) * t,
-            b: a.b + (b.b - a.b) * t,
-            a: a.a + (b.a - a.a) * t,
+            r: lerp(a.r, b.r, t),
+            g: lerp(a.g, b.g, t),
+            b: lerp(a.b, b.b, t),
+            a: lerp(a.a, b.a, t),
         }
     }
 }

@@ -171,14 +171,14 @@ fn user_inputs(sdl_ctx: &mut sdl2::Sdl, cfg: &ControlSettings, camera: &mut Came
 /// The cube is made up of 12 triangles (2 for each face).
 fn get_cube_scene() -> Scene {
     let cube_vertices = [
-        Vertex { pos: Vec3::new(-1.0, -1.0, -1.0) },
-        Vertex { pos: Vec3::new(1.0, -1.0, -1.0) },
-        Vertex { pos: Vec3::new(1.0, 1.0, -1.0) },
-        Vertex { pos: Vec3::new(-1.0, 1.0, -1.0) },
-        Vertex { pos: Vec3::new(-1.0, -1.0, 1.0) },
-        Vertex { pos: Vec3::new(1.0, -1.0, 1.0) },
-        Vertex { pos: Vec3::new(1.0, 1.0, 1.0) },
-        Vertex { pos: Vec3::new(-1.0, 1.0, 1.0) },
+        Vertex { pos: Vec3::new(-1.0, -1.0, -1.0), color: Color::RED },
+        Vertex { pos: Vec3::new(1.0, -1.0, -1.0), color: Color::GREEN },
+        Vertex { pos: Vec3::new(1.0, 1.0, -1.0), color: Color::BLUE },
+        Vertex { pos: Vec3::new(-1.0, 1.0, -1.0), color: Color::RED },
+        Vertex { pos: Vec3::new(-1.0, -1.0, 1.0), color: Color::GREEN },
+        Vertex { pos: Vec3::new(1.0, -1.0, 1.0), color: Color::BLUE },
+        Vertex { pos: Vec3::new(1.0, 1.0, 1.0), color: Color::RED },
+        Vertex { pos: Vec3::new(-1.0, 1.0, 1.0), color: Color::GREEN },
     ];
 
     let triangles = [
