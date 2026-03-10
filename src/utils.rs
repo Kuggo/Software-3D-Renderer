@@ -1,7 +1,10 @@
 use std::cmp::PartialEq;
 use crate::geometry::lerp;
 
-const FP_TOLERANCE: f32 = 0.0001;
+const FP_TOLERANCE: f32 = 1e-6;
+pub fn fp_equals(a: f32, b: f32) -> bool {
+    (a - b).abs() < FP_TOLERANCE
+}
 
 #[derive(Debug, Copy, PartialEq, Clone)]
 pub struct Vec2 {
@@ -410,10 +413,10 @@ impl Quat {
 /// A simple RGBA color struct with values in the range [0.0, 1.0].
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Color {
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
 }
 impl Color {
     pub const WHITE : Color = Color {r: 1.0, g: 1.0, b: 1.0, a: 1.0};

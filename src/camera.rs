@@ -2,7 +2,7 @@ use sdl2::render::{Texture, WindowCanvas};
 use sdl2::video::{Window};
 use sdl2::pixels::PixelFormatEnum;
 use crate::utils::*;
-use crate::renderer::{InterpMode, Renderer};
+use crate::renderer::{CullMode, InterpMode, RenderMode, Renderer};
 use crate::geometry::{Scene, Transform};
 
 
@@ -211,9 +211,16 @@ impl Camera {
     /// This operation should be done frequently to avoid accumulation of float errors in the rotation quaternion.
     pub fn update_transform(&mut self) {
         let yaw_q = Quat::from_axis_angle(Vec3::Y_AXIS, self.yaw.to_radians());
-        let pitch_q = Quat::from_axis_angle(self.right(), self.pitch.to_radians());
-        let roll_q = Quat::from_axis_angle(self.forward(), self.roll.to_radians());
-        self.transform.rot = roll_q.mul(&pitch_q).mul(&yaw_q).normalize();
+
+        let right = yaw_q.rotate_vec3(Vec3::X_AXIS);
+        let pitch_q = Quat::from_axis_angle(right, self.pitch.to_radians());
+
+        let quat = pitch_q.mul(&yaw_q);
+
+        let forward = quat.rotate_vec3(Vec3::Z_AXIS);
+        let roll_q = Quat::from_axis_angle(forward, self.roll.to_radians());
+
+        self.transform.rot = roll_q.mul(&quat).normalize();
     }
 
     /// Moves the camera in a direction relative to where it's currently facing.
@@ -237,7 +244,9 @@ impl Camera {
     pub fn draw_frame_to_screen<'a>(&self, screen: &'a mut Screen) -> &'a mut Screen {
         screen.begin_frame(Color::BLACK);
 
-        let mut renderer = Renderer::new_to_screen(screen, InterpMode::Linear);
+        let mut renderer = Renderer::new_to_screen(
+            screen, InterpMode::Linear, CullMode::Backface, RenderMode::Solid
+        );
         renderer.render_scene_from_camera(self);
 
         screen.show();

@@ -27,23 +27,6 @@ impl Vertex {
         let color = Color::lerp(&a.color, &b.color, t);
         Vertex { pos, color }
     }
-
-    /// Returns the perspective-correct linear interpolation between two vertices `a` and `b` by a factor `t`.
-    /// This is used to interpolate vertex attributes in screen space after perspective projection, to avoid distortion.
-    /// t should be in the range [0.0, 1.0].
-    pub fn zlerp(a: &Vertex, b: &Vertex, t: f32) -> Vertex {
-        let z = 1.0 / lerp(1.0/a.pos.z, 1.0/b.pos.z, t);
-
-        let pos = Vec3::lerp(
-            &a.pos.scale(1.0/a.pos.z), &b.pos.scale(1.0/a.pos.z), t
-        ).scale(z);
-
-        let color = Color::lerp(
-            &a.color, &b.color, t
-        ).scale(z);
-
-        Vertex { pos, color }
-    }
 }
 
 
@@ -72,30 +55,6 @@ impl Triangle {
         let edge1 = self.b.pos.sub(&self.a.pos);
         let edge2 = self.c.pos.sub(&self.a.pos);
         edge1.cross(&edge2).normalize()
-    }
-
-    /// Computes the barycentric coordinates of a point `p` with respect to the triangle.
-    pub fn barycentric_coords(&self, p: &Vec3) -> (f32, f32, f32) {
-        let v0 = self.b.pos.sub(&self.a.pos);
-        let v1 = self.c.pos.sub(&self.a.pos);
-        let v2 = p.sub(&self.a.pos);
-
-        let d00 = v0.dot(&v0);
-        let d01 = v0.dot(&v1);
-        let d11 = v1.dot(&v1);
-        let d20 = v2.dot(&v0);
-        let d21 = v2.dot(&v1);
-
-        let denom = d00 * d11 - d01 * d01;
-        if denom == 0.0 {
-            return (0.0, 0.0, 0.0); // Degenerate triangle
-        }
-
-        let v = (d11 * d20 - d01 * d21) / denom;
-        let w = (d00 * d21 - d01 * d20) / denom;
-        let u = 1.0 - v - w;
-
-        (u, v, w)
     }
 }
 

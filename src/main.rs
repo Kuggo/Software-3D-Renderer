@@ -182,8 +182,8 @@ fn get_cube_scene() -> Scene {
     ];
 
     let triangles = [
-        Triangle { a: cube_vertices[0], b: cube_vertices[1], c: cube_vertices[2] },
-        Triangle { a: cube_vertices[0], b: cube_vertices[2], c: cube_vertices[3] },
+        Triangle { a: cube_vertices[0], b: cube_vertices[2], c: cube_vertices[1] },
+        Triangle { a: cube_vertices[0], b: cube_vertices[3], c: cube_vertices[2] },
         Triangle { a: cube_vertices[4], b: cube_vertices[5], c: cube_vertices[6] },
         Triangle { a: cube_vertices[4], b: cube_vertices[6], c: cube_vertices[7] },
         Triangle { a: cube_vertices[0], b: cube_vertices[1], c: cube_vertices[5] },
@@ -220,7 +220,7 @@ fn main() -> Result<(), String> {
     let fov: f32 = 90.0;    // in degrees
 
     let mouse_sensitivity: f32 = 0.05;
-    let scroll_sensitivity: f32 = 3.0;
+    let scroll_sensitivity: f32 = 5.0;
     let zoom_sensitivity: f32 = 2.0;
     let camera_speed: f32 = 2.0;
 
