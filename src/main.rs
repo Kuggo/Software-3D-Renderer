@@ -1,4 +1,3 @@
-
 use std::ops::Index;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -14,6 +13,7 @@ mod geometry;
 mod renderer;
 pub use crate::camera::{Camera, Screen};
 use crate::geometry::{Mesh, Object, Primitive, Scene, Transform, Triangle, Vertex};
+use crate::renderer::{CullMode, DepthTest, InterpMode, RenderMode, Renderer};
 
 
 /// ControlSettings holds the various sensitivity and speed settings for the controls.
@@ -233,6 +233,7 @@ fn main() -> Result<(), String> {
     let mut screen = &mut Screen::new(&mut sdl_ctx, SCREEN_WIDTH_PIX, SCREEN_HEIGHT_PIX, PIXEL_SIZE, PIXELS_PER_UNIT, "3D Renderer")?;
     let cam_transform = Transform::new(camera_pos, camera_rot, Vec3::IDENTITY);
     let mut camera = Camera::new(scene, cam_transform, fov);
+    let mut renderer = Renderer::new(&screen, InterpMode::Linear, CullMode::None, RenderMode::Solid, DepthTest::Less);
 
     let mut key_states: Keys = [false; 256];
 
@@ -244,7 +245,7 @@ fn main() -> Result<(), String> {
         let frame_start = Instant::now();
 
         // rendering
-        screen = camera.draw_frame_to_screen(screen);
+        screen = camera.draw_frame_to_screen(screen, &mut renderer);
 
         // input
         let stop = user_inputs(&mut sdl_ctx, &config, &mut camera, &screen, &mut key_states, dt);

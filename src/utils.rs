@@ -1,7 +1,7 @@
 use std::cmp::PartialEq;
 use crate::geometry::lerp;
 
-const FP_TOLERANCE: f32 = 1e-6;
+pub const FP_TOLERANCE: f32 = 1e-6;
 pub fn fp_equals(a: f32, b: f32) -> bool {
     (a - b).abs() < FP_TOLERANCE
 }
@@ -117,7 +117,7 @@ impl Pixel {
         Self {x, y}
     }
 
-    pub fn from_vec2(vec: Vec2) -> Pixel {
+    pub fn from_vec2(vec: &Vec2) -> Pixel {
         Pixel::new(vec.x.round() as i32, vec.y.round() as i32)
     }
 

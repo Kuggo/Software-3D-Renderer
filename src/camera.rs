@@ -2,7 +2,7 @@ use sdl2::render::{Texture, WindowCanvas};
 use sdl2::video::{Window};
 use sdl2::pixels::PixelFormatEnum;
 use crate::utils::*;
-use crate::renderer::{CullMode, InterpMode, RenderMode, Renderer};
+use crate::renderer::Renderer;
 use crate::geometry::{Scene, Transform};
 
 
@@ -13,7 +13,6 @@ pub struct Screen {
     pixel_size: u32,
     pixels_per_unit: f32,
 
-    stride: usize,
     framebuffer: Vec<u32>,
 
     canvas: WindowCanvas,
@@ -62,7 +61,6 @@ impl Screen {
             height_pix,
             pixel_size,
             pixels_per_unit,
-            stride: width_pix as usize,
             framebuffer,
             canvas,
             texture,
@@ -75,7 +73,7 @@ impl Screen {
         self.texture.update(
             None,
             bytemuck::cast_slice(&self.framebuffer),
-            self.stride * 4,
+            self.width_pix as usize * 4 ,
         ).unwrap();
 
         self.canvas.copy(&self.texture, None, None).unwrap();
@@ -100,8 +98,8 @@ impl Screen {
     }
 
     /// Checks if the given pixel coordinates are within the bounds of the screen.
-    pub fn in_bounds(&self, x: usize, y: usize) -> bool {
-        x < self.width_pix as usize && y < self.height_pix as usize
+    pub fn in_bounds(&self, x: i32, y: i32) -> bool {
+        x < self.width_pix as i32 && x >= 0 && y < self.height_pix as i32 && y >= 0
     }
 
     pub fn begin_frame(&mut self, color: Color) {
@@ -118,41 +116,16 @@ impl Screen {
 
     /// Draws a pixel at the given coordinates (if they are valid) with the specified color.
     pub fn draw_pixel(&mut self, pixel: Pixel, color: &Color) {
-        let x = pixel.x as usize;
-        let y = pixel.y as usize;
-        if self.in_bounds(x, y) {
-            self.framebuffer[y * self.stride + x] = color.to_argb();
+        if self.in_bounds(pixel.x, pixel.y) {
+            let x = pixel.x as usize;
+            let y = pixel.y as usize;
+            self.framebuffer[y * self.width_pix as usize + x] = color.to_argb();
         }
     }
 
-    /// Draws a horizontal span (inclusive endpoints) using a shader function sampled per pixel.
-    /// `func(t)` receives t in [0, 1] along the directed segment x0 -> x1.
-    pub fn draw_h_line<F: FnMut(f32) -> Color>(&mut self, y: i32, x0: i32, x1: i32, mut func: F) {
-        let (left, right);
-        if y < 0 || y >= self.height_pix as i32 {
-            return;
-        }
-        (left, right) = (x0.min(x1), x0.max(x1));
-        if left < 0 || right >= self.width_pix as i32 {
-            return;
-        }
-
-        let idx = y as usize * self.stride;
-        let row = &mut self.framebuffer[idx + (left as usize) ..= idx + (right as usize)];
-
-        let span = (x1 - x0) as f32;
-        if span == 0.0 {
-            row.fill(func(0.0).to_argb());
-            return;
-        }
-
-        for (i, pixel) in row.iter_mut().enumerate() {
-            let x = left + i as i32;
-            let t = (x - x0) as f32 / span;
-            *pixel = func(t).to_argb();
-        }
+    pub fn fast_draw_pixel(&mut self, idx: i32, color: &Color) {
+        self.framebuffer[idx as usize] = color.to_argb();
     }
-
 }
 
 
@@ -237,21 +210,13 @@ impl Camera {
         self.transform.pos = self.transform.pos.add( &horizontal.add(&vertical) );
     }
 
-    /// Renders the current scene from the camera's perspective onto the given screen.  
-    /// This method clears the previous frame, builds a new one, and displays it on the screen.  
-    /// It takes ownership of the screen for the duration of the frame rendering, 
-    /// and returns it back at the end as the proper rust way.
-    pub fn draw_frame_to_screen<'a>(&self, screen: &'a mut Screen) -> &'a mut Screen {
+    /// Renders the current scene from the camera's perspective onto the given screen.
+    /// Renderer is provided by the caller so its internal buffers can be reused across frames.
+    pub fn draw_frame_to_screen<'a>(&self, screen: &'a mut Screen, renderer: &mut Renderer) -> &'a mut Screen {
         screen.begin_frame(Color::BLACK);
-
-        let mut renderer = Renderer::new_to_screen(
-            screen, InterpMode::Linear, CullMode::Backface, RenderMode::Solid
-        );
-        renderer.render_scene_from_camera(self);
-
+        renderer.render_scene_from_camera(self, screen);
         screen.show();
         screen
     }
 
 }
-
