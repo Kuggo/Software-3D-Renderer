@@ -123,8 +123,8 @@ impl Screen {
         }
     }
 
-    pub fn fast_draw_pixel(&mut self, idx: i32, color: &Color) {
-        self.framebuffer[idx as usize] = color.to_argb();
+    pub fn fast_draw_pixel(&mut self, idx: usize, color: &Color) {
+        self.framebuffer[idx] = color.to_argb();
     }
 }
 

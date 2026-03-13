@@ -1,5 +1,6 @@
 use std::cmp::PartialEq;
 use std::ops;
+use std::ops::Sub;
 use crate::geometry::lerp;
 
 pub const FP_TOLERANCE: f32 = 1e-6;
@@ -105,7 +106,13 @@ impl ops::Add<Vec2> for Vec2 {
         Vec2::new(self.x + other.x, self.y + other.y)
     }
 }
+impl Sub for Vec2 {
+    type Output = Vec2;
 
+    fn sub(self, rhs: Self) -> Self::Output {
+        Vec2::new(self.x - rhs.x, self.y - rhs.y)
+    }
+}
 impl ops::Mul<f32> for Vec2 {
     type Output = Vec2;
 

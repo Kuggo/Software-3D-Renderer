@@ -12,6 +12,10 @@ impl PixelShaderInput for ColorInput {
         let color = interpolate(colors, indices, weights);
         Self { color }
     }
+    
+    fn validate_mesh(mesh: &Mesh) -> bool {
+        mesh.colors.is_some()
+    }
 }
 
 

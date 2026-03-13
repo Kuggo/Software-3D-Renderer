@@ -1,3 +1,4 @@
+use std::ops::Sub;
 use sdl2::log::Category::Input;
 use crate::{Camera, Screen};
 use crate::geometry::*;
@@ -141,6 +142,11 @@ impl Renderer {
 
     /// Renders a single object by applying the view transformation and then rasterizing its primitives.
     fn render_object(&mut self, object: &Object, view: &Transform, screen: &mut Screen) {
+        if !object.material.shader.validate_mesh(&object.mesh) {
+            println!("Invalid mesh for shader, skipping object");
+            return;
+        }
+
         let combined_transform = view.combine_with(&object.transform);
         let mut ctx = RenderingContext {
             screen,
@@ -148,7 +154,6 @@ impl Renderer {
             shader: object.material.shader,
             mesh: &object.mesh,
         };
-        // TODO check if mesh has the needed attributes for the shader. print a warning and skip render
         for primitive in &object.mesh.primitives {
             match primitive {
                 Primitive::Triangle(v1, v2, v3) =>
@@ -264,7 +269,7 @@ impl Renderer {
                 verts: &[v1],
                 depths: &[cam_v.z],
             };
-            self.draw_pixel(pv, &face, &[1.0], ctx);
+            self.draw_pixel(pv, &[1.0], &face, ctx);
         }
     }
 
@@ -301,7 +306,7 @@ impl Renderer {
                 let w = (d00 * d21 - d01 * d20) * inv_denom;
                 let u = 1.0 - v - w;
                 if u >= -FP_TOLERANCE && v >= -FP_TOLERANCE && w >= -FP_TOLERANCE {
-                    self.draw_pixel(Pixel::new(x, y), face_ctx, &[u, v, w], ctx);
+                    self.draw_pixel(Pixel::new(x, y), &[u, v, w], face_ctx, ctx);
                 }
             }
         }
@@ -313,12 +318,13 @@ impl Renderer {
         let dx = p2.x - p1.x;
         let dy = p2.y - p1.y;
         if dx == 0 && dy == 0 {
-            self.draw_pixel(p1, face_ctx, &[1.0, 0.0], ctx);
+            self.draw_pixel(p1, &[1.0, 0.0], face_ctx, ctx);
             return;
         }
 
         if dy == 0 {    // screen can already handle horizontal spans, so we can optimize for that case
-            self.draw_hline(p1.y, p1.x, p2.x, face_ctx, ctx);
+            let (b1, b2) = (Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0));
+            self.draw_hline(p1.y, p1.x, p2.x, b1, b2, face_ctx, ctx);
             return;
         }
 
@@ -328,38 +334,47 @@ impl Renderer {
             let t = i as f32 / steps as f32;
             let p = p1.add(&Pixel::from_vec2(&(slope * t)));
             let bary = &[1.0 - t, t];
-            self.draw_pixel(p, face_ctx, bary, ctx);
+            self.draw_pixel(p, bary, face_ctx, ctx);
         }
     }
 
     /// Draws a pixel on the screen if it passes the depth test.
     /// The color of the pixel is determined by the shader function in the rendering context, which takes the vertex attributes as input.
     /// This function assumes the pixel coordinates are valid and does not perform any bounds checking.
-    fn draw_pixel(&mut self, p: Pixel, face_ctx: &FaceContext, bary: &[f32], ctx: &mut RenderingContext) {
+    fn draw_pixel(&mut self, p: Pixel, bary: &[f32], face_ctx: &FaceContext, ctx: &mut RenderingContext) {
         let idx = (self.zbuffer_res.0 as i32) * (p.y) + (p.x);
-        self.test_and_draw(idx, face_ctx, bary, ctx);
+        self.test_and_draw(idx as usize, face_ctx, bary, ctx);
     }
 
     /// Draws a horizontal line on the screen from (x_start, y) to (x_end, y).
     /// It is optimized to avoid the overhead of index calculation.
-    fn draw_hline(&mut self, y: i32, x_start: i32, x_end: i32, face_ctx: &FaceContext, ctx: &mut RenderingContext) {
+    fn draw_hline(&mut self, y: i32, x_start: i32, x_end: i32, start_bary: Vec2, end_bary: Vec2,
+                  face_ctx: &FaceContext, ctx: &mut RenderingContext) {
+        if x_end < x_start {
+            return;
+        }
         let dx = x_end - x_start;
-        let idx = (self.zbuffer_res.0 as i32) * y + (x_start);
 
-        for x in 0..=dx {
-            let t = x as f32 / dx as f32;
-            self.test_and_draw(idx + x, face_ctx, &[1.0 - t, t], ctx);
+        let mut uv = start_bary;
+        let duv = (end_bary - start_bary) * (1.0 / dx as f32);
+
+        let idx = ((self.zbuffer_res.0 as i32) * y + x_start) as usize;
+        for x in 0..=dx as usize {
+            self.test_and_draw(idx + x, face_ctx, &[uv.x, uv.y], ctx);
+            uv.x += duv.x;
+            uv.y += duv.y;
         }
     }
 
     /// Tests the depth of the pixel against the z-buffer and draws it if it passes.
     /// This is used by both draw_pixel and draw_hline to avoid code duplication.
-    fn test_and_draw(&mut self, idx: i32, face_ctx: &FaceContext, bary: &[f32], ctx: &mut RenderingContext) {
+    fn test_and_draw(&mut self, idx: usize, face_ctx: &FaceContext, bary: &[f32], ctx: &mut RenderingContext) {
         let z = self.interpolate_depth(face_ctx, bary);
-        if self.depth_test.test(z, self.zbuffer[idx as usize]) {
-            self.zbuffer[idx as usize] = z;
-            let weights = self.adjust_bary_weights(&bary, face_ctx.depths, z);
-            let color = ctx.shader.shade(ctx.mesh, face_ctx.verts, &weights);    // we delayed this call to save computation
+        if self.depth_test.test(z, self.zbuffer[idx]) {
+            self.zbuffer[idx] = z;
+            let weights = &mut [0f32; 3];   // so far 3 is the max
+            self.adjust_bary_weights(bary, face_ctx.depths, z, weights);
+            let color = ctx.shader.shade(ctx.mesh, face_ctx.verts, weights);    // we delayed this call to save computation
             ctx.screen.fast_draw_pixel(idx, &color);
         }
     }
@@ -385,17 +400,17 @@ impl Renderer {
         z
     }
 
-    fn adjust_bary_weights(&self, bary: &[f32], depths: &[f32], z: f32) -> Vec<f32> {
+    fn adjust_bary_weights(&self, bary: &[f32], depths: &[f32], z: f32, weights: &mut [f32]) {
         match self.interpolation_mode {
             InterpMode::Linear => {
-                bary.to_vec()
+                for i in 0..depths.len() {
+                    weights[i] = bary[i];
+                }
             }
             InterpMode::DepthCorrect => {
-                bary
-                    .iter()
-                    .zip(depths.iter())
-                    .map(|(w, z_i)| (*w * z) / *z_i)
-                    .collect()
+                for i in 0..depths.len() {
+                    weights[i] = (bary[i] / depths[i]) * z;
+                }
             }
         }
     }

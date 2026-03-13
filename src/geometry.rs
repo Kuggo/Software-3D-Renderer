@@ -56,13 +56,14 @@ pub struct Object<'a> {
     pub material: &'a Material<'a>,
 }
 
-/// A Mesh is a collection of primitives (triangles, lines, points) that define an object's surface.
+/// A Mesh is a collection of primitives (triangles, lines, points) that define an object's surface,
+/// and their attributes
 pub struct Mesh {
+    pub primitives: Vec<Primitive>,
     pub positions: Vec<Vec3>,
     pub colors: Option<Vec<Color>>,
     pub normals: Option<Vec<Vec3>>,
     pub uvs: Option<Vec<Vec2>>,
-    pub primitives: Vec<Primitive>, // Collection of primitives
 }
 
 /// A Transform represents the position, rotation, and scale of an object in 3D space.

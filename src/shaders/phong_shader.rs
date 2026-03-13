@@ -15,6 +15,10 @@ impl PixelShaderInput for PhongInput {
         let uv = interpolate(uvs, indices, weights);
         Self { normal, uv, }
     }
+
+    fn validate_mesh(mesh: &Mesh) -> bool {
+        mesh.colors.is_some() && mesh.normals.is_some() && mesh.uvs.is_some()
+    }
 }
 
 

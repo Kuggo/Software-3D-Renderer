@@ -11,17 +11,29 @@ pub struct Material<'a> {
 pub trait PixelShaderInput {
     fn interpolate(mesh: &Mesh, indices: &[u32], weights: &[f32]) -> Self
     where Self: Sized;
+
+    fn validate_mesh(mesh: &Mesh) -> bool {
+        // Default implementation: check if the mesh has the required attributes for this shader input.
+        // This can be overridden by specific shader inputs if they require additional attributes.
+        true
+    }
 }
 
 
 pub trait BaseShader {
     fn shade(&self, mesh: &Mesh, indices: &[u32], weights: &[f32]) -> Color;
+
+    fn validate_mesh(&self, mesh: &Mesh) -> bool;
 }
 impl<T> BaseShader for T
 where T: Shader, {
     fn shade(&self, mesh: &Mesh, indices: &[u32], weights: &[f32]) -> Color {
         let input = T::Input::interpolate(mesh, indices, weights);
         self.shade(&input)
+    }
+
+    fn validate_mesh(&self, mesh: &Mesh) -> bool {
+        T::Input::validate_mesh(mesh)
     }
 }
 
