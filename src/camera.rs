@@ -131,17 +131,17 @@ impl Screen {
 
 /// The Camera represents the viewer's perspective in the 3D scene. 
 /// It holds the position and orientation of the camera, as well as the field of view (FOV) for perspective projection.
-pub struct Camera {
-    pub scene: Scene,
+pub struct Camera<'a> {
+    pub scene: Scene<'a>,
     pub transform: Transform,
     pub pitch: f32,
     pub yaw: f32,
     pub roll: f32,
     fov: f32,
 }
-impl Camera {
+impl<'a> Camera<'a> {
     /// Creates a new Camera for a scene, with some initial transform, and field of view (FOV).
-    pub fn new(scene: Scene, transform: Transform, fov: f32) -> Self {
+    pub fn new(scene: Scene<'a>, transform: Transform, fov: f32) -> Self {
         let camera = Camera {
             scene,
             transform,
@@ -203,16 +203,16 @@ impl Camera {
         let flat_forward = Vec3::new(forward.x, 0.0, forward.z).normalize(); // project forward onto horizontal plane
 
         let right = flat_forward.cross(&Vec3::Y_AXIS);
-        let horizontal = right.scale(direction.x).add( &flat_forward.scale(direction.z) );
+        let horizontal = right * direction.x + flat_forward * direction.z;
 
-        let vertical = Vec3::Y_AXIS.scale(direction.y);
+        let vertical = Vec3::Y_AXIS * direction.y;
 
-        self.transform.pos = self.transform.pos.add( &horizontal.add(&vertical) );
+        self.transform.pos = self.transform.pos + horizontal + vertical;
     }
 
     /// Renders the current scene from the camera's perspective onto the given screen.
     /// Renderer is provided by the caller so its internal buffers can be reused across frames.
-    pub fn draw_frame_to_screen<'a>(&self, screen: &'a mut Screen, renderer: &mut Renderer) -> &'a mut Screen {
+    pub fn draw_frame_to_screen<'b>(&self, screen: &'b mut Screen, renderer: &mut Renderer) -> &'b mut Screen {
         screen.begin_frame(Color::BLACK);
         renderer.render_scene_from_camera(self, screen);
         screen.show();

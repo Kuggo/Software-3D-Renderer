@@ -1,3 +1,4 @@
+use crate::shader::{Material, BaseShader};
 use crate::utils::*;
 
 
@@ -34,28 +35,9 @@ impl Vertex {
 /// Currently only triangles are supported, but lines and points could be added in the future.
 #[derive(Debug, Copy, PartialEq, Clone)]
 pub enum Primitive {
-    Triangle(Triangle),
-    Line(Vertex, Vertex),
-    Point(Vertex),
-}
-#[derive(Debug, Copy, PartialEq, Clone)]
-pub struct Triangle {
-    pub a: Vertex,
-    pub b: Vertex,
-    pub c: Vertex,
-}
-impl Triangle {
-    /// Creates a new Triangle with the given vertices.
-    pub fn new(a: Vertex, b: Vertex, c: Vertex) -> Self {
-        Self { a, b, c }
-    }
-
-    /// Computes the normal vector of the triangle using the cross product of its edges.
-    pub fn get_normal(&self) -> Vec3 {
-        let edge1 = self.b.pos.sub(&self.a.pos);
-        let edge2 = self.c.pos.sub(&self.a.pos);
-        edge1.cross(&edge2).normalize()
-    }
+    Point(u32),     // Single vertex (point)
+    Line(u32, u32), // Two vertices (line)
+    Triangle(u32, u32, u32), // Three vertices (triangle)
 }
 
 
@@ -63,19 +45,24 @@ impl Triangle {
 // Objects and Scene
 
 /// A Scene is a collection of objects.
-pub struct Scene {
-    pub objects: Vec<Object>,
+pub struct Scene<'a> {
+    pub objects: Vec<Object<'a>>,
 }
 
 /// An Object is an instance of a mesh with a specific transform (position, rotation, scale).
-pub struct Object {
+pub struct Object<'a> {
     pub transform: Transform,
     pub mesh: Mesh,
+    pub material: &'a Material<'a>,
 }
 
 /// A Mesh is a collection of primitives (triangles, lines, points) that define an object's surface.
 pub struct Mesh {
-    pub primitives: Vec<Primitive>,
+    pub positions: Vec<Vec3>,
+    pub colors: Option<Vec<Color>>,
+    pub normals: Option<Vec<Vec3>>,
+    pub uvs: Option<Vec<Vec2>>,
+    pub primitives: Vec<Primitive>, // Collection of primitives
 }
 
 /// A Transform represents the position, rotation, and scale of an object in 3D space.
@@ -105,7 +92,7 @@ impl Transform {
             1.0 / t.scale.y,
             1.0 / t.scale.z,
         );
-        let inv_pos = inv_rot.rotate_vec3( t.pos.scale(-1.0))
+        let inv_pos = inv_rot.rotate_vec3( t.pos * -1.0)
             .scale_vec( &inv_scale );
 
         Transform {
@@ -118,8 +105,8 @@ impl Transform {
     /// Applies the transform to a given vertex position, returning the transformed position.
     pub fn apply_to(&self, v: &Vec3) -> Vec3 {
         let v = v.scale_vec(&self.scale);
-        let v = &self.rot.rotate_vec3(v);
-        v.add(&self.pos)
+        let v = self.rot.rotate_vec3(v);
+        v + self.pos
     }
 
     /// Combines this transform with another local transform, returning a new transform
@@ -128,7 +115,7 @@ impl Transform {
         let scaled = local.pos.scale_vec(&self.scale);
         let rotated = self.rot.rotate_vec3(scaled);
 
-        let pos = self.pos.add(&rotated);
+        let pos = self.pos + rotated;
 
         let rot = self.rot.mul(&local.rot);
 

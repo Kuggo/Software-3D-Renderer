@@ -11,10 +11,14 @@ use crate::utils::*;
 mod camera;
 mod geometry;
 mod renderer;
-pub use crate::camera::{Camera, Screen};
-use crate::geometry::{Mesh, Object, Primitive, Scene, Transform, Triangle, Vertex};
-use crate::renderer::{CullMode, DepthTest, InterpMode, RenderMode, Renderer};
+mod shader;
+mod shaders;
 
+pub use crate::camera::{Camera, Screen};
+use crate::geometry::{Mesh, Object, Primitive, Scene, Transform, Vertex};
+use crate::renderer::{CullMode, DepthTest, InterpMode, RenderMode, Renderer};
+use crate::shader::{Material};
+use crate::shaders::{ColorShader, PhongShader};
 
 /// ControlSettings holds the various sensitivity and speed settings for the controls.
 struct ControlSettings {
@@ -157,7 +161,7 @@ fn user_inputs(sdl_ctx: &mut sdl2::Sdl, cfg: &ControlSettings, camera: &mut Came
     let mov_x = (key_states[Key::A] as i32 - key_states[Key::D] as i32) as f32;
     let mov_y = (key_states[Key::Space] as i32 - key_states[Key::Shift] as i32) as f32;
     let mov_z = (key_states[Key::W] as i32 - key_states[Key::S] as i32) as f32;
-    let mov = Vec3::new(mov_x, mov_y, mov_z).normalize().scale(dt * cfg.camera_speed);
+    let mov = Vec3::new(mov_x, mov_y, mov_z).normalize() * (dt * cfg.camera_speed);
 
     camera.move_rel_to_facing(mov);
     camera.update_transform();
@@ -169,36 +173,54 @@ fn user_inputs(sdl_ctx: &mut sdl2::Sdl, cfg: &ControlSettings, camera: &mut Came
 
 /// Creates a simple scene with a cube in the center.
 /// The cube is made up of 12 triangles (2 for each face).
-fn get_cube_scene() -> Scene {
-    let cube_vertices = [
-        Vertex { pos: Vec3::new(-1.0, -1.0, -1.0), color: Color::RED },
-        Vertex { pos: Vec3::new(1.0, -1.0, -1.0), color: Color::GREEN },
-        Vertex { pos: Vec3::new(1.0, 1.0, -1.0), color: Color::BLUE },
-        Vertex { pos: Vec3::new(-1.0, 1.0, -1.0), color: Color::RED },
-        Vertex { pos: Vec3::new(-1.0, -1.0, 1.0), color: Color::GREEN },
-        Vertex { pos: Vec3::new(1.0, -1.0, 1.0), color: Color::BLUE },
-        Vertex { pos: Vec3::new(1.0, 1.0, 1.0), color: Color::RED },
-        Vertex { pos: Vec3::new(-1.0, 1.0, 1.0), color: Color::GREEN },
+fn get_cube_scene<'a>() -> Scene<'a> {
+    let triangles: &[[u32;3]] = &[
+        [0, 2, 1],
+        [0, 3, 2],
+        [4, 5, 6],
+        [4, 6, 7],
+        [0, 1, 5],
+        [0, 5, 4],
+        [2, 3, 7],
+        [2, 7, 6],
+        [1, 2, 6],
+        [1, 6, 5],
+        [3, 0, 4],
+        [3, 4, 7],
     ];
 
-    let triangles = [
-        Triangle { a: cube_vertices[0], b: cube_vertices[2], c: cube_vertices[1] },
-        Triangle { a: cube_vertices[0], b: cube_vertices[3], c: cube_vertices[2] },
-        Triangle { a: cube_vertices[4], b: cube_vertices[5], c: cube_vertices[6] },
-        Triangle { a: cube_vertices[4], b: cube_vertices[6], c: cube_vertices[7] },
-        Triangle { a: cube_vertices[0], b: cube_vertices[1], c: cube_vertices[5] },
-        Triangle { a: cube_vertices[0], b: cube_vertices[5], c: cube_vertices[4] },
-        Triangle { a: cube_vertices[2], b: cube_vertices[3], c: cube_vertices[7] },
-        Triangle { a: cube_vertices[2], b: cube_vertices[7], c: cube_vertices[6] },
-        Triangle { a: cube_vertices[1], b: cube_vertices[2], c: cube_vertices[6] },
-        Triangle { a: cube_vertices[1], b: cube_vertices[6], c: cube_vertices[5] },
-        Triangle { a: cube_vertices[3], b: cube_vertices[0], c: cube_vertices[4] },
-        Triangle { a: cube_vertices[3], b: cube_vertices[4], c: cube_vertices[7] },
+    let positions = vec![
+        Vec3::new(-1.0, -1.0, -1.0),
+        Vec3::new(1.0, -1.0, -1.0),
+        Vec3::new(1.0, 1.0, -1.0),
+        Vec3::new(-1.0, 1.0, -1.0),
+        Vec3::new(-1.0, -1.0, 1.0),
+        Vec3::new(1.0, -1.0, 1.0),
+        Vec3::new(1.0, 1.0, 1.0),
+        Vec3::new(-1.0, 1.0, 1.0),
+    ];
+
+    let colors = vec![
+        Color::RED,
+        Color::GREEN,
+        Color::BLUE,
+        Color::RED,
+        Color::GREEN,
+        Color::BLUE,
+        Color::RED,
+        Color::GREEN,
     ];
 
     let cube = Object {
-        transform: Transform::new(Vec3::Z_AXIS.scale(5.0), Quat::IDENTITY, Vec3::IDENTITY),
-        mesh: Mesh { primitives: triangles.iter().map(|t| Primitive::Triangle(*t)).collect() },
+        transform: Transform::new(Vec3::Z_AXIS * 5.0, Quat::IDENTITY, Vec3::IDENTITY),
+        mesh: Mesh {
+            positions,
+            colors: Some(colors),
+            normals: None,
+            uvs: None,
+            primitives: triangles.iter().map(|&[a,b,c]| Primitive::Triangle(a, b, c)).collect()
+        },
+        material: &Material { shader: &ColorShader },
     };
 
     let scene = Scene { objects: vec![cube] };
@@ -233,7 +255,7 @@ fn main() -> Result<(), String> {
     let mut screen = &mut Screen::new(&mut sdl_ctx, SCREEN_WIDTH_PIX, SCREEN_HEIGHT_PIX, PIXEL_SIZE, PIXELS_PER_UNIT, "3D Renderer")?;
     let cam_transform = Transform::new(camera_pos, camera_rot, Vec3::IDENTITY);
     let mut camera = Camera::new(scene, cam_transform, fov);
-    let mut renderer = Renderer::new(&screen, InterpMode::Linear, CullMode::None, RenderMode::Solid, DepthTest::Less);
+    let mut renderer = Renderer::new(&screen, InterpMode::DepthCorrect, CullMode::Backface, RenderMode::Solid, DepthTest::Less);
 
     let mut key_states: Keys = [false; 256];
 

@@ -1,4 +1,5 @@
 use std::cmp::PartialEq;
+use std::ops;
 use crate::geometry::lerp;
 
 pub const FP_TOLERANCE: f32 = 1e-6;
@@ -93,16 +94,27 @@ impl Vec2 {
     /// Linearly interpolate between this Vec2 and another Vec2 by a factor of t.  
     /// t should be in the range [0.0, 1.0].
     pub fn lerp(a: &Vec2, b: &Vec2, t: f32) -> Vec2 {
-        Vec2 {
-            x: a.x + (b.x - a.x) * t,
-            y: a.y + (b.y - a.y) * t,
-        }
+        *a * (1.0 - t) + *b * t
+    }
+}
+
+impl ops::Add<Vec2> for Vec2 {
+    type Output = Vec2;
+
+    fn add(self, other: Vec2) -> Vec2 {
+        Vec2::new(self.x + other.x, self.y + other.y)
+    }
+}
+
+impl ops::Mul<f32> for Vec2 {
+    type Output = Vec2;
+
+    fn mul(self, scalar: f32) -> Vec2 {
+        Vec2::new(self.x * scalar, self.y * scalar)
     }
 }
 
 
-/// A simple struct representing a pixel coordinate on the screen, with integer x and y values.
-/// Despite x,y are i32 for convenience in calculations, but they are meant to be non-negative.
 #[derive(Debug, Copy, PartialEq, Clone)]
 pub struct Pixel {
     pub x: i32,
@@ -209,21 +221,6 @@ impl Vec3 {
             self.x * other.y - self.y * other.x)
     }
 
-    /// Add this Vec3 to another Vec3, returning the resulting Vec3.
-    pub fn add(&self, other: &Vec3) -> Vec3 {
-        Vec3::new(self.x + other.x, self.y + other.y, self.z + other.z)
-    }
-
-    /// Subtract another Vec3 from this Vec3, returning the resulting Vec3.
-    pub fn sub(&self, other: &Vec3) -> Vec3 {
-        Vec3::new(self.x - other.x, self.y - other.y, self.z - other.z)
-    }
-
-    /// Scale this Vec3 by a scalar value, returning the resulting Vec3.
-    pub fn scale(&self, scalar: f32) -> Vec3 {
-        Vec3::new(self.x * scalar, self.y * scalar, self.z * scalar)
-    }
-
     /// Returns the Hadamard product (component-wise multiplication) of this Vec3 with another Vec3.
     pub fn scale_vec(&self, other: &Vec3) -> Vec3 {
         Vec3::new(
@@ -282,8 +279,8 @@ impl Vec3 {
         if l1 == 0.0 || l2 == 0.0 {
             return true;
         }
-        let n1 = self.scale(1.0 / l1);
-        let n2 = other.scale(1.0 / l2);
+        let n1 = *self * (1.0 / l1);
+        let n2 = *other * (1.0 / l2);
         n1.equals_fp(&n2)
     }
 
@@ -301,13 +298,35 @@ impl Vec3 {
         if l == 0.0 {
             return Vec3::new(0.0, 0.0, 0.0);
         }
-        other.scale(self.dot(other) / l)
+        *other * (self.dot(other) / l)
     }
 
     /// Returns the component of this Vec3 that is orthogonal (perpendicular) to another Vec3.
     pub fn orthogonal_component(&self, other: &Vec3) -> Vec3 {
-        self.sub(&self.project_onto(&other))
+        *self - self.project_onto(&other)
     }
+}
+impl ops::Add<Vec3> for Vec3 {
+    type Output = Vec3;
+
+    fn add(self, other: Vec3) -> Vec3 {
+        Vec3::new(self.x + other.x, self.y + other.y, self.z + other.z)
+    }
+}
+impl ops::Sub<Vec3> for Vec3 {
+    type Output = Vec3;
+
+    fn sub(self, other: Vec3) -> Vec3 {
+        Vec3::new(self.x - other.x, self.y - other.y, self.z - other.z)
+    }
+}
+impl ops::Mul<f32> for Vec3 {
+    type Output = Vec3;
+
+    fn mul(self, scalar: f32) -> Vec3 {
+        Vec3::new(self.x * scalar, self.y * scalar, self.z * scalar)
+    }
+    
 }
 
 
@@ -326,7 +345,7 @@ impl Quat {
 
         Quat {
             cos_a2: c,
-            axis_sin_a2: axis.scale(s),
+            axis_sin_a2: axis * s,
         }
     }
 
@@ -355,9 +374,9 @@ impl Quat {
     pub fn mul(&self, other: &Quat) -> Quat {
         let angle = self.cos_a2 * other.cos_a2 - self.axis_sin_a2.dot(&other.axis_sin_a2);
 
-        let axis = other.axis_sin_a2.scale(self.cos_a2)
-            .add(&self.axis_sin_a2.scale(other.cos_a2))
-            .add(&self.axis_sin_a2.cross(&other.axis_sin_a2));
+        let axis = other.axis_sin_a2 * self.cos_a2 + 
+            self.axis_sin_a2 * other.cos_a2 + 
+            self.axis_sin_a2.cross(&other.axis_sin_a2);
 
         Quat { cos_a2: angle, axis_sin_a2: axis }
     }
@@ -367,15 +386,15 @@ impl Quat {
     pub fn conjugate(&self) -> Quat {
         Quat {
             cos_a2: self.cos_a2,
-            axis_sin_a2: self.axis_sin_a2.scale(-1.0),
+            axis_sin_a2: self.axis_sin_a2 * -1.0,
         }
     }
 
     /// Apply the rotation of the quaternion to a 3D vector.
     pub fn rotate_vec3(&self, v: Vec3) -> Vec3 {
-        let t = self.axis_sin_a2.cross(&v).scale(2.0);
+        let t = self.axis_sin_a2.cross(&v) * 2.0;
 
-        v.add( &t.scale(self.cos_a2) ).add( &self.axis_sin_a2.cross(&t) )
+        v + t * self.cos_a2 + self.axis_sin_a2.cross(&t) 
     }
 
     /// Normalize the quaternion to ensure it represents a valid rotation.
@@ -386,7 +405,7 @@ impl Quat {
 
         Quat {
             cos_a2: self.cos_a2 / len,
-            axis_sin_a2: self.axis_sin_a2.scale(1.0/len),
+            axis_sin_a2: self.axis_sin_a2 * (1.0/len),
         }
     }
     
@@ -481,11 +500,32 @@ impl Color {
     /// Linearly interpolate between this color and another color by a factor of t.  
     /// t should be in the range [0.0, 1.0].
     pub fn lerp(a: &Color, b: &Color, t: f32) -> Color {
+        *a * (1.0 - t) + *b * t
+    }
+}
+
+impl ops::Add<Color> for Color {
+    type Output = Color;
+
+    fn add(self, other: Color) -> Color {
         Color {
-            r: lerp(a.r, b.r, t),
-            g: lerp(a.g, b.g, t),
-            b: lerp(a.b, b.b, t),
-            a: lerp(a.a, b.a, t),
+            r: self.r + other.r,
+            g: self.g + other.g,
+            b: self.b + other.b,
+            a: self.a + other.a,
+        }
+    }
+}
+
+impl ops::Mul<f32> for Color {
+    type Output = Color;
+
+    fn mul(self, scalar: f32) -> Color {
+        Color {
+            r: self.r * scalar,
+            g: self.g * scalar,
+            b: self.b * scalar,
+            a: self.a * scalar,
         }
     }
 }
