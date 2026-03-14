@@ -1,9 +1,7 @@
-use std::ops::Sub;
-use sdl2::log::Category::Input;
 use crate::{Camera, Screen};
 use crate::geometry::*;
-use crate::shader::{BaseShader, Shader};
-use crate::utils::{fp_equals, Color, Pixel, Vec2, Vec3, FP_TOLERANCE};
+use crate::shader::{BaseShader};
+use crate::utils::{fp_equals, Pixel, Vec2, Vec3, FP_TOLERANCE};
 
 #[derive(Debug, Copy, Clone)]
 pub enum InterpMode {
@@ -166,6 +164,10 @@ impl Renderer {
         }
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Primitive rendering
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
     /// Renders a triangle by drawing the color of every pixel it covers onto the screen.
     /// It starts by applying the combined view and object transformations to the triangle vertices,
     /// then projects them to 2D screen space, and finally converts those to pixel coordinates.
@@ -210,7 +212,7 @@ impl Renderer {
         };
         match self.render_mode {
             RenderMode::Solid => {
-                self.rasterize_triangle(&face, ctx)
+                self.scanline_triangle(&face, ctx)
             },
             RenderMode::Wireframe => {
                 self.rasterize_line(&face, ctx);
@@ -273,9 +275,12 @@ impl Renderer {
         }
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Triangle rasterization
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
     /// Rasterizes a triangle by filling in the color of every pixel it covers onto the screen.
-    /// It precomputes triangle constants to make the inner loop faster, avoiding the overhead of
-    /// barycentric_coords function.
+    /// It precomputes triangle constants to make the inner loop faster
     fn rasterize_triangle(&mut self, face_ctx: &FaceContext, ctx: &mut RenderingContext) {
         let (pa, pb, pc) = (face_ctx.pixels[0], face_ctx.pixels[1], face_ctx.pixels[2]);
         let bottom = pa.y.min(pb.y).min(pc.y);
@@ -298,8 +303,6 @@ impl Renderer {
         for y in bottom..=top {
             for x in left..=right {
                 let v2 = Vec2::new((x - pa.x) as f32 + 0.5, (y - pa.y) as f32 + 0.5);
-                // TODO switch to use edge tests instead of barycentric coordinates, to avoid the overhead of the dot products and multiplications
-                // it would also help with precision so all triangles use same values for the edge tests, instead of each pixel having slightly different barycentric coords
                 let d20 = v2.dot(&v0);
                 let d21 = v2.dot(&v1);
                 let v = (d11 * d20 - d01 * d21) * inv_denom;
@@ -311,6 +314,59 @@ impl Renderer {
             }
         }
     }
+
+    /// Rasterizes a triangle by filling in the color of every pixel it covers onto the screen.
+    /// It uses the scanline algorithm, which is more efficient than barycentric coordinate method
+    /// because it avoids the overhead of the dot products and multiplications in the inner loop.
+    fn scanline_triangle(&mut self, face_ctx: &FaceContext, ctx: &mut RenderingContext) {
+        // Walk along smaller edge and big edge and draw horizontal lines.
+        // switch to other small edge when we reach the end of current one.
+        let mut verts = [0usize, 1, 2];
+        verts.sort_by_key(|&i| {face_ctx.pixels[i].y});
+        // long edge is verts[0] to verts[2]
+        // small edges are verts[0] to verts[1] and verts[1] to verts[2]
+        let (p0, p1, p2) = (face_ctx.pixels[verts[0]], face_ctx.pixels[verts[1]], face_ctx.pixels[verts[2]]);
+        let uvs = [Vec2::X_AXIS, Vec2::Y_AXIS, Vec2::ZERO];
+        let (uv0, uv1, uv2) = (uvs[verts[0]], uvs[verts[1]], uvs[verts[2]]);
+
+        let long_slope_x      = (p2.x - p0.x) as f32 / (p2.y - p0.y) as f32;
+        let long_slope_uv      = (uv2 - uv0) * (1.0 / (p2.y - p0.y) as f32);
+        let mut short_slope_x = (p1.x - p0.x) as f32 / (p1.y - p0.y) as f32;
+        let mut short_slope_uv = (uv1 - uv0) * (1.0 / (p1.y - p0.y) as f32);
+
+        let mut long_x  = p0.x as f32 + 0.5;
+        let mut long_uv  = uv0;
+        let mut short_x = p0.x as f32 + 0.5;
+        let mut short_uv = uv0;
+        for y in (p0.y)..p1.y {
+            self.draw_hline(y, short_x as i32, long_x as i32, short_uv, long_uv, face_ctx, ctx);
+            long_x += long_slope_x;
+            long_uv.x += long_slope_uv.x;
+            long_uv.y += long_slope_uv.y;
+            short_x += short_slope_x;
+            short_uv.x += short_slope_uv.x;
+            short_uv.y += short_slope_uv.y;
+        }
+
+        short_slope_x = (p2.x - p1.x) as f32 / (p2.y - p1.y) as f32;
+        short_slope_uv  = (uv2 - uv1) * (1.0 / (p2.y - p1.y) as f32);
+
+        short_x = p1.x as f32 + 0.5;
+        short_uv = uv1;
+        for y in p1.y..p2.y {
+            self.draw_hline(y, short_x as i32, long_x as i32, short_uv, long_uv, face_ctx, ctx);
+            long_x += long_slope_x;
+            long_uv.x += long_slope_uv.x;
+            long_uv.y += long_slope_uv.y;
+            short_x += short_slope_x;
+            short_uv.x += short_slope_uv.x;
+            short_uv.y += short_slope_uv.y;
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Line drawing
+    ////////////////////////////////////////////////////////////////////////////////////////////////
 
     /// Rasterizes a line by filling in the color of every pixel it covers onto the screen.
     fn rasterize_line(&mut self, face_ctx: &FaceContext, ctx: &mut RenderingContext) {
@@ -338,20 +394,15 @@ impl Renderer {
         }
     }
 
-    /// Draws a pixel on the screen if it passes the depth test.
-    /// The color of the pixel is determined by the shader function in the rendering context, which takes the vertex attributes as input.
-    /// This function assumes the pixel coordinates are valid and does not perform any bounds checking.
-    fn draw_pixel(&mut self, p: Pixel, bary: &[f32], face_ctx: &FaceContext, ctx: &mut RenderingContext) {
-        let idx = (self.zbuffer_res.0 as i32) * (p.y) + (p.x);
-        self.test_and_draw(idx as usize, face_ctx, bary, ctx);
-    }
-
     /// Draws a horizontal line on the screen from (x_start, y) to (x_end, y).
     /// It is optimized to avoid the overhead of index calculation.
-    fn draw_hline(&mut self, y: i32, x_start: i32, x_end: i32, start_bary: Vec2, end_bary: Vec2,
-                  face_ctx: &FaceContext, ctx: &mut RenderingContext) {
+    fn draw_hline(
+        &mut self, y: i32, mut x_start: i32, mut x_end: i32, mut start_bary: Vec2, mut end_bary: Vec2,
+        face_ctx: &FaceContext, ctx: &mut RenderingContext
+    ) {
         if x_end < x_start {
-            return;
+            (x_start, x_end) = (x_end, x_start);
+            (start_bary, end_bary) = (end_bary, start_bary);
         }
         let dx = x_end - x_start;
 
@@ -360,10 +411,22 @@ impl Renderer {
 
         let idx = ((self.zbuffer_res.0 as i32) * y + x_start) as usize;
         for x in 0..=dx as usize {
-            self.test_and_draw(idx + x, face_ctx, &[uv.x, uv.y], ctx);
+            self.test_and_draw(idx + x, face_ctx, &[uv.x, uv.y, 1.0-uv.x-uv.y], ctx);
             uv.x += duv.x;
             uv.y += duv.y;
         }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Pixel drawing and depth testing
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /// Draws a pixel on the screen if it passes the depth test.
+    /// The color of the pixel is determined by the shader function in the rendering context, which takes the vertex attributes as input.
+    /// This function assumes the pixel coordinates are valid and does not perform any bounds checking.
+    fn draw_pixel(&mut self, p: Pixel, bary: &[f32], face_ctx: &FaceContext, ctx: &mut RenderingContext) {
+        let idx = (self.zbuffer_res.0 as i32) * (p.y) + (p.x);
+        self.test_and_draw(idx as usize, face_ctx, bary, ctx);
     }
 
     /// Tests the depth of the pixel against the z-buffer and draws it if it passes.
@@ -379,6 +442,11 @@ impl Renderer {
         }
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Perspective correction and interpolation
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /// Interpolates the depth of a pixel based on the interpolation mode.
     fn interpolate_depth(&self, face_ctx: &FaceContext, bary: &[f32]) -> f32 {
         let len = bary.len();
         let z = match self.interpolation_mode {
@@ -400,6 +468,7 @@ impl Renderer {
         z
     }
 
+    /// Adjusts the barycentric weights according to the interpolation mode.
     fn adjust_bary_weights(&self, bary: &[f32], depths: &[f32], z: f32, weights: &mut [f32]) {
         match self.interpolation_mode {
             InterpMode::Linear => {
