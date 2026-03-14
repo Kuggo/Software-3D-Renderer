@@ -15,7 +15,7 @@ mod shader;
 mod shaders;
 
 pub use crate::camera::{Camera, Screen};
-use crate::geometry::{Mesh, Object, Primitive, Scene, Transform, Vertex};
+use crate::geometry::{Mesh, Object, Primitive, Scene, Transform};
 use crate::renderer::{CullMode, DepthTest, InterpMode, RenderMode, Renderer};
 use crate::shader::{Material};
 use crate::shaders::{ColorShader, PhongShader};

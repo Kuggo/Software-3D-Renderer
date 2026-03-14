@@ -1,3 +1,4 @@
+use std::ops::Sub;
 use crate::shader::{Material, BaseShader};
 use crate::utils::*;
 
@@ -7,26 +8,29 @@ pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
 }
 
 
-/// Vertex containing attributes used to render primitives.
-#[derive(Debug, Copy, PartialEq, Clone)]
-pub struct Vertex {
-    pub pos: Vec3,
-    pub color: Color,
-    //pub normal: Vec3,
-    //pub uv: Vec2,
+#[derive(Clone, Copy)]
+pub struct Plane {
+    pub normal: Vec3,
+    pub d: f32,
 }
-impl Vertex {
-    /// Creates a new Vertex with the given attributes.
-    pub fn new(pos: Vec3, color: Color) -> Self {
-        Self { pos, color }
+impl Plane {
+    pub const XY: Plane = Plane { normal: Vec3::Z_AXIS, d: 0.0 };
+    pub const XZ: Plane = Plane { normal: Vec3::Y_AXIS, d: 0.0 };
+    pub const YZ: Plane = Plane { normal: Vec3::X_AXIS, d: 0.0 };
+    
+    pub fn new(normal: Vec3, d: f32) -> Self {
+        Self { normal, d }
+    }
+    pub fn distance(&self, p: Vec3) -> f32 {
+        self.normal.dot(&p) + self.d
     }
 
-    /// Returns the linear interpolation between two vertices `a` and `b` by a factor `t`.
-    /// t should be in the range [0.0, 1.0].
-    pub fn lerp(a: &Vertex, b: &Vertex, t: f32) -> Vertex {
-        let pos = Vec3::lerp(&a.pos, &b.pos, t);
-        let color = Color::lerp(&a.color, &b.color, t);
-        Vertex { pos, color }
+    pub fn intersect_line_seg(&self, p1: Vec3, p2: Vec3) -> Vec3 {
+        let d1 = self.distance(p1);
+        let d2 = self.distance(p2);
+        let t = d1 / (d1 - d2);
+        
+        p1 + (p2 - p1) * t
     }
 }
 

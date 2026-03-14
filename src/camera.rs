@@ -90,6 +90,11 @@ impl Screen {
         self.width_pix as f32 / self.pixels_per_unit
     }
 
+    /// Returns the height of the screen in world space units, based on the pixels_per_unit setting.
+    pub fn get_height_units(&self) -> f32 {
+        self.height_pix as f32 / self.pixels_per_unit
+    }
+
     /// Returns the coordinates of the center of the screen in pixel coordinates.
     pub fn get_screen_center_pix(&self) -> (u32, u32) {
         let x = self.width_pix * self.pixel_size / 2;
@@ -109,9 +114,9 @@ impl Screen {
     /// Converts world space coordinates to pixel coordinates on the screen.
     /// The center of the screen corresponds to (0, 0) in world space.
     pub fn world_to_screen_coords(&self, coord: Vec2) -> Pixel {
-        let screen_x = (self.width_pix as i32 / 2) + (coord.x * self.pixels_per_unit) as i32;
-        let screen_y = (self.height_pix as i32 / 2) - (coord.y * self.pixels_per_unit) as i32;
-        Pixel::new(screen_x, screen_y)
+        let screen_x = (self.width_pix >>1) as f32 + coord.x * (self.pixels_per_unit-0.1);
+        let screen_y = (self.height_pix>>1) as f32 - coord.y * (self.pixels_per_unit-0.1);
+        Pixel::new( screen_x as i32, screen_y as i32, )
     }
 
     /// Draws a pixel at the given coordinates (if they are valid) with the specified color.
