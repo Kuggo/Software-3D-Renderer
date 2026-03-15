@@ -212,7 +212,41 @@ fn get_cube_scene<'a>() -> Scene<'a> {
     ];
 
     let cube = Object {
-        transform: Transform::new(Vec3::Z_AXIS * 5.0, Quat::IDENTITY, Vec3::IDENTITY),
+        transform: Transform::new(Vec3::Z_AXIS * 2.5, Quat::from_axis_angle(Vec3::Y_AXIS, 35f32.to_radians()), Vec3::IDENTITY),
+        mesh: Mesh {
+            positions,
+            colors: Some(colors),
+            normals: None,
+            uvs: None,
+            primitives: triangles.iter().map(|&[a,b,c]| Primitive::Triangle(a, b, c)).collect()
+        },
+        material: &Material { shader: &ColorShader },
+    };
+
+    let scene = Scene { objects: vec![cube] };
+    scene
+}
+
+
+fn get_tri_scene<'a>() -> Scene<'a> {
+    let triangles: &[[u32;3]] = &[
+        [0, 2, 1],
+    ];
+
+    let positions = vec![
+        Vec3::new(-1.0, -1.0, -1.0),
+        Vec3::new(1.0, -1.0, -1.0),
+        Vec3::new(1.0, 1.0, -1.0),
+    ];
+
+    let colors = vec![
+        Color::RED,
+        Color::GREEN,
+        Color::BLUE,
+    ];
+
+    let cube = Object {
+        transform: Transform::new(Vec3::Z_AXIS * 2.5, Quat::from_axis_angle(Vec3::Y_AXIS, 35f32.to_radians()), Vec3::IDENTITY),
         mesh: Mesh {
             positions,
             colors: Some(colors),
@@ -238,7 +272,6 @@ fn main() -> Result<(), String> {
     let target_fps: f32 = 30.0;
 
     let camera_pos = Vec3::ZERO;
-    let camera_rot = Quat::IDENTITY;
     let fov: f32 = 90.0;    // in degrees
 
     let mouse_sensitivity: f32 = 0.05;
@@ -253,7 +286,7 @@ fn main() -> Result<(), String> {
 
     let mut sdl_ctx: sdl2::Sdl = sdl2::init()?;
     let mut screen = &mut Screen::new(&mut sdl_ctx, SCREEN_WIDTH_PIX, SCREEN_HEIGHT_PIX, PIXEL_SIZE, PIXELS_PER_UNIT, "3D Renderer")?;
-    let cam_transform = Transform::new(camera_pos, camera_rot, Vec3::IDENTITY);
+    let cam_transform = Transform::new(camera_pos, Quat::IDENTITY, Vec3::IDENTITY);
     let mut camera = Camera::new(scene, cam_transform, fov);
     let mut renderer = Renderer::new(&screen, InterpMode::DepthCorrect, CullMode::Backface, RenderMode::Solid, DepthTest::Less);
 

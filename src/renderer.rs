@@ -65,13 +65,12 @@ impl DepthTest {
 
 struct FaceContext<'a> {
     pixels: &'a [Pixel],
-    uvs: &'a [Vec2],
     vert_indices: &'a [u32],
-    verts_cam: &'a [Vec3],
+    verts_cam: &'a [Vertex],
 }
 
 #[derive(Debug, Copy, Clone)]
-struct ClippedVertex {
+struct Vertex {
     pos: Vec3,
     uv: Vec2,
 }
@@ -201,7 +200,6 @@ impl Renderer {
         let v0_cam = ctx.transform.apply_to(v0_pos);
         let v1_cam = ctx.transform.apply_to(v1_pos);
         let v2_cam = ctx.transform.apply_to(v2_pos);
-        let verts_cam = [v0_cam, v1_cam, v2_cam];
 
         // cross product between vectors a->b and a->c gives us the normal of the triangle
         // dot product of the normal with camera->triangle gives us facing direction
@@ -221,14 +219,14 @@ impl Renderer {
         if (ca & cb & cc) != 0 { return; }// trivial reject
 
         let verts = [
-            ClippedVertex { pos: v0_cam, uv: Vec2::X_AXIS },
-            ClippedVertex { pos: v1_cam, uv: Vec2::Y_AXIS },
-            ClippedVertex { pos: v2_cam, uv: Vec2::ZERO }, // third component is implicitly 1.0 - u - v
+            Vertex { pos: v0_cam, uv: Vec2::X_AXIS },
+            Vertex { pos: v1_cam, uv: Vec2::Y_AXIS },
+            Vertex { pos: v2_cam, uv: Vec2::ZERO }, // third component is implicitly 1.0 - u - v
         ];
 
         // trivial accept
         if (ca | cb | cc) == 0 {
-            self.process_triangle(original_tri, &verts, &verts_cam, ctx);
+            self.process_triangle(original_tri, &verts, ctx);
             return;
         }
 
@@ -238,14 +236,13 @@ impl Renderer {
             return; // not a valid triangle anymore, so we can skip rasterization
         }
         for clipped_tri in self.triangulate(&clipped_verts) {
-            self.process_triangle(original_tri, &clipped_tri, &verts_cam, ctx);
+            self.process_triangle(original_tri, &clipped_tri, ctx);
         }
     }
 
     /// The all vertices in verts are in camera space and inside the frustum
-    fn process_triangle(&mut self, original_tri: &[u32; 3], verts: &[ClippedVertex; 3], verts_cam: &[Vec3],
-                        ctx: &mut RenderingContext) {
-        let [v0, v1, v2] = verts;
+    fn process_triangle(&mut self, original_tri: &[u32; 3], verts: &[Vertex; 3], ctx: &mut RenderingContext) {
+        let [v0, v1, v2] = *verts;
         // Project the vertices to 2D screen space
         let sa = self.perspective_project(&v0.pos);
         let sb = self.perspective_project(&v1.pos);
@@ -257,28 +254,19 @@ impl Renderer {
         let pc = ctx.screen.world_to_screen_coords(sc);
         assert!(ctx.screen.in_bounds(pa.x, pa.y) && ctx.screen.in_bounds(pb.x, pb.y) && ctx.screen.in_bounds(pc.x, pc.y));
 
-        let mut face = FaceContext {
+        let face = FaceContext {
             pixels: &[pa, pb, pc],
             vert_indices: original_tri,
-            uvs: &[v0.uv, v1.uv, v2.uv],
-            verts_cam,
+            verts_cam: verts,
         };
         match self.render_mode {
             RenderMode::Solid => {
                 self.scanline_triangle(&face, ctx)
             },
             RenderMode::Wireframe => {
-                self.rasterize_line(&face, ctx);
-                face.pixels = &face.pixels[1..];
-                face.uvs = &face.uvs[1..];
-                self.rasterize_line(&face, ctx);
-                let face = FaceContext {
-                    pixels: &[pc, pa],
-                    vert_indices: original_tri,
-                    uvs: &[v2.uv, v0.uv],
-                    verts_cam,
-                };
-                self.rasterize_line(&face, ctx);
+                self.rasterize_line(0, 1, &face, ctx);
+                self.rasterize_line(1, 2, &face, ctx);
+                self.rasterize_line(2, 0, &face, ctx);
             }
         }
     }
@@ -294,20 +282,25 @@ impl Renderer {
         let cam_v1 = ctx.transform.apply_to(v1_pos);
         let cam_v2 = ctx.transform.apply_to(v2_pos);
 
-        let sa = self.perspective_project(&cam_v1);
-        let sb = self.perspective_project(&cam_v2);
+        let endpoints = [
+            Vertex { pos: cam_v1, uv: Vec2::X_AXIS },
+            Vertex { pos: cam_v2, uv: Vec2::Y_AXIS }
+        ];
+        if let Some([clipped_v1, clipped_v2]) = self.clip_line_segment(&endpoints) {
+            let sa = self.perspective_project(&clipped_v1.pos);
+            let sb = self.perspective_project(&clipped_v1.pos);
 
-        let pa = ctx.screen.world_to_screen_coords(sa);
-        let pb = ctx.screen.world_to_screen_coords(sb);
+            let pa = ctx.screen.world_to_screen_coords(sa);
+            let pb = ctx.screen.world_to_screen_coords(sb);
 
-        if ctx.screen.in_bounds(pa.x, pa.y) && ctx.screen.in_bounds(pb.x, pb.y) {
+            assert!(ctx.screen.in_bounds(pa.x, pa.y) && ctx.screen.in_bounds(pb.x, pb.y));
+
             let face = FaceContext {
                 pixels: &[pa, pb],
                 vert_indices: line,
-                uvs: &[Vec2::X_AXIS, Vec2::Y_AXIS],
-                verts_cam: &[cam_v1, cam_v2],
+                verts_cam: &[clipped_v1, clipped_v2],
             };
-            self.rasterize_line(&face, ctx);
+            self.rasterize_line(0, 1, &face, ctx);
         }
     }
 
@@ -323,10 +316,9 @@ impl Renderer {
             let face = FaceContext {
                 pixels: &[pv],
                 vert_indices: &[v1],
-                uvs: &[Vec2::ZERO], // dummy value, will not be used
-                verts_cam: &[cam_v],
+                verts_cam: &[Vertex{ pos: cam_v, uv: Vec2::ZERO }], // uvs will not be used
             };
-            self.draw_pixel(pv, &[1.0], &face, ctx);
+            self.draw_pixel(pv, &[1.0, 0.0, 0.0], &face, ctx);
         }
     }
 
@@ -387,7 +379,7 @@ impl Renderer {
 
     /// Clips a triangle against the view frustum defined by the clip planes.
     /// It returns a list of vertices that form a convex polygon.
-    fn clip_triangle(&self, tri: &[ClippedVertex; 3]) -> Vec<ClippedVertex> {
+    fn clip_triangle(&self, tri: &[Vertex; 3]) -> Vec<Vertex> {
         let mut poly = tri.to_vec();
 
         for plane in &self.clip_planes {
@@ -400,18 +392,43 @@ impl Renderer {
         poly
     }
 
+    fn clip_line_segment(&self, endpoints: &[Vertex; 2]) -> Option<[Vertex; 2]> {
+        let mut start = endpoints[0];
+        let mut end = endpoints[1];
+
+        for plane in &self.clip_planes {
+            let start_dist = plane.distance(start.pos);
+            let end_dist = plane.distance(end.pos);
+            let start_inside = start_dist >= 0.0;
+            let end_inside = end_dist >= 0.0;
+
+            match (start_inside, end_inside) {
+                (true, true) => {}
+                (false, false) => return None,
+                (true, false) => {
+                    end = self.clip_intersection(start, end, start_dist, end_dist);
+                }
+                (false, true) => {
+                    start = self.clip_intersection(start, end, start_dist, end_dist);
+                }
+            }
+        }
+
+        Some([start, end])
+    }
+
     /// Finds the intersection point between the line segment defined by start and end,
     /// and the plane defined by start_dist and end_dist.
-    fn clip_intersection(&self, start: ClippedVertex, end: ClippedVertex, start_dist: f32, end_dist: f32) -> ClippedVertex {
+    fn clip_intersection(&self, start: Vertex, end: Vertex, start_dist: f32, end_dist: f32) -> Vertex {
         let t = start_dist / (start_dist - end_dist);
-        ClippedVertex {
-            pos: start.pos + (end.pos - start.pos) * t,
+        Vertex {
+            pos: Vec3::lerp(&start.pos, &end.pos, t),
             uv: Vec2::lerp(&start.uv, &end.uv, t),
         }
     }
 
     /// Clips a convex polygon against a plane.
-    fn clip_polygon_against_plane(&self, input: &[ClippedVertex], plane: &Plane) -> Vec<ClippedVertex> {
+    fn clip_polygon_against_plane(&self, input: &[Vertex], plane: &Plane) -> Vec<Vertex> {
         let mut output = Vec::new();
         if input.is_empty() {
             return output;
@@ -453,7 +470,7 @@ impl Renderer {
     }
 
     /// Triangulates a convex polygon into a list of triangles forming a triangle fan.
-    fn triangulate(&self, poly: &[ClippedVertex]) -> Vec<[ClippedVertex; 3]> {
+    fn triangulate(&self, poly: &[Vertex]) -> Vec<[Vertex; 3]> {
         let mut tris = Vec::new();
         for i in 1..poly.len() - 1 {
             tris.push([poly[0], poly[i], poly[i + 1]]);
@@ -492,11 +509,14 @@ impl Renderer {
                 let v2 = Vec2::new((x - pa.x) as f32 + 0.5, (y - pa.y) as f32 + 0.5);
                 let d20 = v2.dot(&v0);
                 let d21 = v2.dot(&v1);
-                let v = (d11 * d20 - d01 * d21) * inv_denom;
-                let w = (d00 * d21 - d01 * d20) * inv_denom;
-                let u = 1.0 - v - w;
-                if u >= -FP_TOLERANCE && v >= -FP_TOLERANCE && w >= -FP_TOLERANCE {
-                    self.draw_pixel(Pixel::new(x, y), &[u, v, w], face_ctx, ctx);
+                let local_v = (d11 * d20 - d01 * d21) * inv_denom;
+                let local_w = (d00 * d21 - d01 * d20) * inv_denom;
+                let local_u = 1.0 - local_v - local_w;
+                if local_u >= -FP_TOLERANCE && local_v >= -FP_TOLERANCE && local_w >= -FP_TOLERANCE {
+                    let uv = face_ctx.verts_cam[0].uv * local_u +
+                        face_ctx.verts_cam[1].uv * local_v + face_ctx.verts_cam[2].uv * local_w;
+                    let w = 1.0 - uv.x - uv.y;
+                    self.draw_pixel(Pixel::new(x, y), &[uv.x, uv.y, w], face_ctx, ctx);
                 }
             }
         }
@@ -513,7 +533,7 @@ impl Renderer {
         // long edge is verts[0] to verts[2]
         // small edges are verts[0] to verts[1] and verts[1] to verts[2]
         let (p0, p1, p2) = (face_ctx.pixels[verts[0]], face_ctx.pixels[verts[1]], face_ctx.pixels[verts[2]]);
-        let (uv0, uv1, uv2) = (face_ctx.uvs[verts[0]], face_ctx.uvs[verts[1]], face_ctx.uvs[verts[2]]);
+        let (uv0, uv1, uv2) = (face_ctx.verts_cam[verts[0]].uv, face_ctx.verts_cam[verts[1]].uv, face_ctx.verts_cam[verts[2]].uv);
 
         let long_slope_x      = (p2.x - p0.x) as f32 / (p2.y - p0.y) as f32;
         let long_slope_uv      = (uv2 - uv0) * (1.0 / (p2.y - p0.y) as f32);
@@ -555,39 +575,29 @@ impl Renderer {
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
     /// Rasterizes a line by filling in the color of every pixel it covers onto the screen.
-    fn rasterize_line(&mut self, face_ctx: &FaceContext, ctx: &mut RenderingContext) {
-        let (p1, p2) = (face_ctx.pixels[0], face_ctx.pixels[1]);
+    fn rasterize_line(&mut self, start_idx: usize, end_idx: usize,
+                      face_ctx: &FaceContext, ctx: &mut RenderingContext) {
+        let (p1, p2) = (face_ctx.pixels[start_idx], face_ctx.pixels[end_idx]);
         let dx = p2.x - p1.x;
         let dy = p2.y - p1.y;
         if dx == 0 && dy == 0 {
-            if face_ctx.vert_indices.len() == 3 {
-                let uv = face_ctx.uvs[0];
-                self.draw_pixel(p1, &[uv.x, uv.y, 1.0 - uv.x - uv.y], face_ctx, ctx);
-            }
-            else {
-                let uv = face_ctx.uvs[0];
-                self.draw_pixel(p1, &[uv.x, uv.y], face_ctx, ctx);
-            }
+            let uv = face_ctx.verts_cam[start_idx].uv;
+            self.draw_pixel(p1, &[uv.x, uv.y, 1.0 - uv.x - uv.y], face_ctx, ctx);
             return;
         }
 
         if dy == 0 {    // screen can already handle horizontal spans, so we can optimize for that case
-            self.draw_hline(p1.y, p1.x, p2.x, face_ctx.uvs[0], face_ctx.uvs[1], face_ctx, ctx);
+            self.draw_hline(p1.y, p1.x, p2.x, face_ctx.verts_cam[0].uv, face_ctx.verts_cam[1].uv, face_ctx, ctx);
             return;
         }
 
         let steps = dx.abs().max(dy.abs());
-        let slope = Vec2::new(dx as f32 / steps as f32, dy as f32 / steps as f32);
+        let slope = Vec2::new(dx as f32, dy as f32);
         for i in 0..=steps {
             let t = i as f32 / steps as f32;
             let p = p1.add(&Pixel::from_vec2(&(slope * t)));
-            let uv = Vec2::lerp(&face_ctx.uvs[0], &face_ctx.uvs[1], t);
-            if face_ctx.vert_indices.len() == 3 {
-                self.draw_pixel(p, &[uv.x, uv.y, 1.0 - uv.x - uv.y], face_ctx, ctx);
-            }
-            else {
-                self.draw_pixel(p, &[uv.x, uv.y], face_ctx, ctx);
-            }
+            let uv = Vec2::lerp(&face_ctx.verts_cam[start_idx].uv, &face_ctx.verts_cam[end_idx].uv, t);
+            self.draw_pixel(p, &[uv.x, uv.y, 1.0 - uv.x - uv.y], face_ctx, ctx);
         }
     }
 
@@ -608,12 +618,7 @@ impl Renderer {
 
         let idx = ((self.zbuffer_res.0 as i32) * y + x_start) as usize;
         for x in 0..=dx as usize {
-            if face_ctx.vert_indices.len() == 3 {
-                self.test_and_draw(idx + x, face_ctx, &[uv.x, uv.y, 1.0-uv.x-uv.y], ctx);
-            }
-            else {
-                self.test_and_draw(idx + x, face_ctx, &[uv.x, uv.y], ctx);
-            }
+            self.test_and_draw(idx + x, face_ctx, &[uv.x, uv.y, 1.0-uv.x-uv.y], ctx);
             uv.x += duv.x;
             uv.y += duv.y;
         }
@@ -626,20 +631,22 @@ impl Renderer {
     /// Draws a pixel on the screen if it passes the depth test.
     /// The color of the pixel is determined by the shader function in the rendering context, which takes the vertex attributes as input.
     /// This function assumes the pixel coordinates are valid and does not perform any bounds checking.
-    fn draw_pixel(&mut self, p: Pixel, bary: &[f32], face_ctx: &FaceContext, ctx: &mut RenderingContext) {
+    fn draw_pixel(&mut self, p: Pixel, bary: &[f32;3], face_ctx: &FaceContext, ctx: &mut RenderingContext) {
         let idx = (self.zbuffer_res.0 as i32) * (p.y) + (p.x);
         self.test_and_draw(idx as usize, face_ctx, bary, ctx);
     }
 
     /// Tests the depth of the pixel against the z-buffer and draws it if it passes.
     /// This is used by both draw_pixel and draw_hline to avoid code duplication.
-    fn test_and_draw(&mut self, idx: usize, face_ctx: &FaceContext, bary: &[f32], ctx: &mut RenderingContext) {
+    fn test_and_draw(&mut self, idx: usize, face_ctx: &FaceContext, bary: &[f32;3], ctx: &mut RenderingContext) {
         let z = self.interpolate_depth(face_ctx, bary);
         if self.depth_test.test(z, self.zbuffer[idx]) {
             self.zbuffer[idx] = z;
+
+            // we delay computing color of pixel until we know it will be drawn
             let weights = &mut [0f32; 3];   // so far 3 is the max
             self.adjust_bary_weights(bary, face_ctx, z, weights);
-            let color = ctx.shader.shade(ctx.mesh, face_ctx.vert_indices, weights);    // we delayed this call to save computation
+            let color = ctx.shader.shade(ctx.mesh, face_ctx.vert_indices, weights);
             ctx.screen.fast_draw_pixel(idx, &color);
         }
     }
@@ -649,20 +656,20 @@ impl Renderer {
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
     /// Interpolates the depth of a pixel based on the interpolation mode.
-    fn interpolate_depth(&self, face_ctx: &FaceContext, bary: &[f32]) -> f32 {
+    fn interpolate_depth(&self, face_ctx: &FaceContext, bary: &[f32;3]) -> f32 {
         let len = bary.len();
         let z = match self.interpolation_mode {
             InterpMode::Linear => {
                 let mut z = 0.0;
                 for i in 0..len {
-                    z += face_ctx.verts_cam[i].z * bary[i];
+                    z += bary[i] * face_ctx.verts_cam[i].pos.z;
                 }
                 z
             },
             InterpMode::DepthCorrect => {
                 let mut inv_z = 0.0;
                 for i in 0..len {
-                    inv_z += (1.0/face_ctx.verts_cam[i].z) * bary[i];
+                    inv_z += bary[i] / face_ctx.verts_cam[i].pos.z;
                 }
                 1.0 / inv_z
             },
@@ -680,7 +687,7 @@ impl Renderer {
             }
             InterpMode::DepthCorrect => {
                 for i in 0..face_ctx.verts_cam.len() {
-                    weights[i] = (bary[i] / face_ctx.verts_cam[i].z) * z;
+                    weights[i] = (bary[i] / face_ctx.verts_cam[i].pos.z) * z;
                 }
             }
         }
