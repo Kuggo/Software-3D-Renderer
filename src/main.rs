@@ -212,7 +212,7 @@ fn get_cube_scene<'a>() -> Scene<'a> {
     ];
 
     let cube = Object {
-        transform: Transform::new(Vec3::Z_AXIS * 2.5, Quat::from_axis_angle(Vec3::Y_AXIS, 35f32.to_radians()), Vec3::IDENTITY),
+        transform: Transform::new(Vec3::Z_AXIS * 5.0, Quat::IDENTITY, Vec3::IDENTITY),
         mesh: Mesh {
             positions,
             colors: Some(colors),

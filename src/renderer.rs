@@ -67,6 +67,7 @@ struct FaceContext<'a> {
     pixels: &'a [Pixel],
     vert_indices: &'a [u32],
     verts_cam: &'a [Vertex],
+    og_verts_cam: &'a [Vertex],
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -223,10 +224,11 @@ impl Renderer {
             Vertex { pos: v1_cam, uv: Vec2::Y_AXIS },
             Vertex { pos: v2_cam, uv: Vec2::ZERO }, // third component is implicitly 1.0 - u - v
         ];
+        let interp_inv_z = [1.0 / v0_cam.z, 1.0 / v1_cam.z, 1.0 / v2_cam.z];
 
         // trivial accept
         if (ca | cb | cc) == 0 {
-            self.process_triangle(original_tri, &verts, ctx);
+            self.process_triangle(original_tri, &verts, &verts, ctx);
             return;
         }
 
@@ -236,12 +238,14 @@ impl Renderer {
             return; // not a valid triangle anymore, so we can skip rasterization
         }
         for clipped_tri in self.triangulate(&clipped_verts) {
-            self.process_triangle(original_tri, &clipped_tri, ctx);
+            self.process_triangle(original_tri, &verts, &clipped_tri, ctx);
         }
     }
 
     /// The all vertices in verts are in camera space and inside the frustum
-    fn process_triangle(&mut self, original_tri: &[u32; 3], verts: &[Vertex; 3], ctx: &mut RenderingContext) {
+    fn process_triangle(&mut self, original_tri: &[u32; 3], og_verts: &[Vertex; 3], verts: &[Vertex; 3],
+        ctx: &mut RenderingContext,
+    ) {
         let [v0, v1, v2] = *verts;
         // Project the vertices to 2D screen space
         let sa = self.perspective_project(&v0.pos);
@@ -258,6 +262,7 @@ impl Renderer {
             pixels: &[pa, pb, pc],
             vert_indices: original_tri,
             verts_cam: verts,
+            og_verts_cam: og_verts,
         };
         match self.render_mode {
             RenderMode::Solid => {
@@ -288,7 +293,7 @@ impl Renderer {
         ];
         if let Some([clipped_v1, clipped_v2]) = self.clip_line_segment(&endpoints) {
             let sa = self.perspective_project(&clipped_v1.pos);
-            let sb = self.perspective_project(&clipped_v1.pos);
+            let sb = self.perspective_project(&clipped_v2.pos);
 
             let pa = ctx.screen.world_to_screen_coords(sa);
             let pb = ctx.screen.world_to_screen_coords(sb);
@@ -299,6 +304,7 @@ impl Renderer {
                 pixels: &[pa, pb],
                 vert_indices: line,
                 verts_cam: &[clipped_v1, clipped_v2],
+                og_verts_cam: &endpoints,
             };
             self.rasterize_line(0, 1, &face, ctx);
         }
@@ -313,10 +319,12 @@ impl Renderer {
         let sv = self.perspective_project(&cam_v);
         let pv = ctx.screen.world_to_screen_coords(sv);
         if ctx.screen.in_bounds(pv.x, pv.y) {
+            let verts = &[Vertex { pos: cam_v, uv: Vec2::ZERO }];
             let face = FaceContext {
                 pixels: &[pv],
                 vert_indices: &[v1],
-                verts_cam: &[Vertex{ pos: cam_v, uv: Vec2::ZERO }], // uvs will not be used
+                verts_cam: verts, // uvs will not be used
+                og_verts_cam: verts,
             };
             self.draw_pixel(pv, &[1.0, 0.0, 0.0], &face, ctx);
         }
@@ -614,7 +622,11 @@ impl Renderer {
         let dx = x_end - x_start;
 
         let mut uv = start_bary;
-        let duv = (end_bary - start_bary) * (1.0 / dx as f32);
+        let duv = if dx == 0 {
+            Vec2::ZERO
+        } else {
+            (end_bary - start_bary) * (1.0 / dx as f32)
+        };
 
         let idx = ((self.zbuffer_res.0 as i32) * y + x_start) as usize;
         for x in 0..=dx as usize {
@@ -631,14 +643,14 @@ impl Renderer {
     /// Draws a pixel on the screen if it passes the depth test.
     /// The color of the pixel is determined by the shader function in the rendering context, which takes the vertex attributes as input.
     /// This function assumes the pixel coordinates are valid and does not perform any bounds checking.
-    fn draw_pixel(&mut self, p: Pixel, bary: &[f32;3], face_ctx: &FaceContext, ctx: &mut RenderingContext) {
+    fn draw_pixel(&mut self, p: Pixel, bary: &[f32], face_ctx: &FaceContext, ctx: &mut RenderingContext) {
         let idx = (self.zbuffer_res.0 as i32) * (p.y) + (p.x);
         self.test_and_draw(idx as usize, face_ctx, bary, ctx);
     }
 
     /// Tests the depth of the pixel against the z-buffer and draws it if it passes.
     /// This is used by both draw_pixel and draw_hline to avoid code duplication.
-    fn test_and_draw(&mut self, idx: usize, face_ctx: &FaceContext, bary: &[f32;3], ctx: &mut RenderingContext) {
+    fn test_and_draw(&mut self, idx: usize, face_ctx: &FaceContext, bary: &[f32], ctx: &mut RenderingContext) {
         let z = self.interpolate_depth(face_ctx, bary);
         if self.depth_test.test(z, self.zbuffer[idx]) {
             self.zbuffer[idx] = z;
@@ -656,38 +668,37 @@ impl Renderer {
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
     /// Interpolates the depth of a pixel based on the interpolation mode.
-    fn interpolate_depth(&self, face_ctx: &FaceContext, bary: &[f32;3]) -> f32 {
-        let len = bary.len();
-        let z = match self.interpolation_mode {
+    fn interpolate_depth(&self, face_ctx: &FaceContext, bary: &[f32]) -> f32 {
+        let len = face_ctx.og_verts_cam.len();
+        match self.interpolation_mode {
             InterpMode::Linear => {
                 let mut z = 0.0;
                 for i in 0..len {
-                    z += bary[i] * face_ctx.verts_cam[i].pos.z;
+                    z += bary[i] * face_ctx.og_verts_cam[i].pos.z;
                 }
                 z
             },
             InterpMode::DepthCorrect => {
                 let mut inv_z = 0.0;
                 for i in 0..len {
-                    inv_z += bary[i] / face_ctx.verts_cam[i].pos.z;
+                    inv_z += bary[i] / face_ctx.og_verts_cam[i].pos.z;
                 }
                 1.0 / inv_z
             },
-        };
-        z
+        }
     }
 
     /// Adjusts the barycentric weights according to the interpolation mode.
     fn adjust_bary_weights(&self, bary: &[f32], face_ctx: &FaceContext, z: f32, weights: &mut [f32]) {
         match self.interpolation_mode {
             InterpMode::Linear => {
-                for i in 0..face_ctx.verts_cam.len() {
+                for i in 0..face_ctx.og_verts_cam.len() {
                     weights[i] = bary[i];
                 }
             }
             InterpMode::DepthCorrect => {
-                for i in 0..face_ctx.verts_cam.len() {
-                    weights[i] = (bary[i] / face_ctx.verts_cam[i].pos.z) * z;
+                for i in 0..face_ctx.og_verts_cam.len() {
+                    weights[i] = (bary[i] / face_ctx.og_verts_cam[i].pos.z) * z;
                 }
             }
         }
