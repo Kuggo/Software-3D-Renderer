@@ -136,17 +136,17 @@ impl Screen {
 
 /// The Camera represents the viewer's perspective in the 3D scene. 
 /// It holds the position and orientation of the camera, as well as the field of view (FOV) for perspective projection.
-pub struct Camera<'a> {
-    pub scene: Scene<'a>,
+pub struct Camera {
+    pub scene: Scene,
     pub transform: Transform,
     pub pitch: f32,
     pub yaw: f32,
     pub roll: f32,
     fov: f32,
 }
-impl<'a> Camera<'a> {
+impl Camera {
     /// Creates a new Camera for a scene, with some initial transform, and field of view (FOV).
-    pub fn new(scene: Scene<'a>, transform: Transform, fov: f32) -> Self {
+    pub fn new(scene: Scene, transform: Transform, fov: f32) -> Self {
         let camera = Camera {
             scene,
             transform,

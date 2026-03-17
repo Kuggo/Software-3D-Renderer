@@ -1,13 +1,13 @@
 use crate::geometry::Mesh;
-use crate::shader::{interpolate, PixelShaderInput, Shader};
+use crate::shader::{interpolate, VaryingAttributes, Shader};
 use crate::utils::Color;
 
 
-pub struct ColorInput {
+pub struct ColorVarying {
     pub color: Color,
 }
-impl PixelShaderInput for ColorInput {
-    fn interpolate(mesh: &Mesh, indices: &[u32], weights: &[f32]) -> Self {
+impl VaryingAttributes for ColorVarying {
+    fn calculate(mesh: &Mesh, indices: &[u32], weights: &[f32]) -> Self {
         let colors = mesh.colors.as_ref().unwrap();
         let color = interpolate(colors, indices, weights);
         Self { color }
@@ -21,9 +21,9 @@ impl PixelShaderInput for ColorInput {
 
 pub struct ColorShader;
 impl Shader for ColorShader {
-    type Input = ColorInput;
+    type Input = ColorVarying;
 
-    fn shade(&self, input: &ColorInput) -> Color {
+    fn shade(&self, input: &ColorVarying) -> Color {
         input.color
     }
 }

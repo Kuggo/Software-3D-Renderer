@@ -1,15 +1,17 @@
+use std::any::Any;
 use std::ops;
+use std::rc::Rc;
 use crate::geometry::{Mesh, Primitive};
 use crate::utils::{Color, Vec2, Vec3};
 
 
-pub struct Material<'a> {
-    pub shader: &'a dyn BaseShader,
+pub struct Material {
+    pub shader: Rc<dyn BaseShader>,
 }
 
 
-pub trait PixelShaderInput {
-    fn interpolate(mesh: &Mesh, indices: &[u32], weights: &[f32]) -> Self
+pub trait VaryingAttributes {
+    fn calculate(mesh: &Mesh, indices: &[u32], weights: &[f32]) -> Self
     where Self: Sized;
 
     fn validate_mesh(mesh: &Mesh) -> bool {
@@ -24,23 +26,34 @@ pub trait BaseShader {
     fn shade(&self, mesh: &Mesh, indices: &[u32], weights: &[f32]) -> Color;
 
     fn validate_mesh(&self, mesh: &Mesh) -> bool;
+
+    fn assign_uniforms(&mut self, uniforms: &dyn Any) -> bool;
 }
 impl<T> BaseShader for T
 where T: Shader, {
     fn shade(&self, mesh: &Mesh, indices: &[u32], weights: &[f32]) -> Color {
-        let input = T::Input::interpolate(mesh, indices, weights);
+        let input = T::Input::calculate(mesh, indices, weights);
         self.shade(&input)
     }
 
     fn validate_mesh(&self, mesh: &Mesh) -> bool {
         T::Input::validate_mesh(mesh)
     }
+
+    fn assign_uniforms(&mut self, uniforms: &dyn Any) -> bool {
+        T::assign_uniforms(self, uniforms)
+    }
 }
 
 pub trait Shader {
-    type Input: PixelShaderInput;
+    type Input: VaryingAttributes;
 
     fn shade(&self, input: &Self::Input) -> Color;
+
+    fn assign_uniforms(&mut self, uniforms: &dyn Any) -> bool {
+        // Default implementation does nothing, but specific shaders can override this to assign uniform values.
+        true
+    }
 }
 
 

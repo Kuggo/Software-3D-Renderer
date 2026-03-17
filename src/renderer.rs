@@ -169,7 +169,7 @@ impl Renderer {
         let mut ctx = RenderingContext {
             screen,
             transform: &combined_transform,
-            shader: object.material.shader,
+            shader: &*object.material.shader,
             mesh: &object.mesh,
         };
         for primitive in &object.mesh.primitives {
@@ -266,7 +266,7 @@ impl Renderer {
         };
         match self.render_mode {
             RenderMode::Solid => {
-                self.scanline_triangle(&face, ctx)
+                self.scanline_triangle(&face, ctx);
             },
             RenderMode::Wireframe => {
                 self.rasterize_line(0, 1, &face, ctx);

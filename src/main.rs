@@ -1,4 +1,5 @@
 use std::ops::Index;
+use std::rc::Rc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -13,12 +14,13 @@ mod geometry;
 mod renderer;
 mod shader;
 mod shaders;
+mod texture;
 
 pub use crate::camera::{Camera, Screen};
 use crate::geometry::{Mesh, Object, Primitive, Scene, Transform};
 use crate::renderer::{CullMode, DepthTest, InterpMode, RenderMode, Renderer};
 use crate::shader::{Material};
-use crate::shaders::{ColorShader, PhongShader};
+use crate::shaders::{ColorShader, PhongShader, TextureShader};
 
 /// ControlSettings holds the various sensitivity and speed settings for the controls.
 struct ControlSettings {
@@ -173,7 +175,7 @@ fn user_inputs(sdl_ctx: &mut sdl2::Sdl, cfg: &ControlSettings, camera: &mut Came
 
 /// Creates a simple scene with a cube in the center.
 /// The cube is made up of 12 triangles (2 for each face).
-fn get_cube_scene<'a>() -> Scene<'a> {
+fn get_cube_scene() -> Scene {
     let triangles: &[[u32;3]] = &[
         [0, 2, 1],
         [0, 3, 2],
@@ -200,6 +202,17 @@ fn get_cube_scene<'a>() -> Scene<'a> {
         Vec3::new(-1.0, 1.0, 1.0),
     ];
 
+    let uvs = vec![
+        Vec2::new(0.0, 0.0),
+        Vec2::new(1.0, 0.0),
+        Vec2::new(1.0, 1.0),
+        Vec2::new(0.0, 1.0),
+        Vec2::new(0.0, 0.0),
+        Vec2::new(1.0, 0.0),
+        Vec2::new(1.0, 1.0),
+        Vec2::new(0.0, 1.0),
+    ];
+
     let colors = vec![
         Color::RED,
         Color::GREEN,
@@ -211,16 +224,31 @@ fn get_cube_scene<'a>() -> Scene<'a> {
         Color::GREEN,
     ];
 
+    let checker_texture = texture::Texture::new(
+        vec![
+            Color::WHITE, Color::RED, Color::WHITE, Color::GREEN,
+            Color::RED, Color::WHITE, Color::GREEN, Color::WHITE,
+            Color::WHITE, Color::GREEN, Color::WHITE, Color::BLUE,
+            Color::GREEN, Color::WHITE, Color::BLUE, Color::WHITE,
+        ],
+        4,
+        4,
+        texture::TextureFilter::Nearest,
+        texture::TextureWrap::Repeat
+    );
+
+    let shader = TextureShader { texture: Some(checker_texture) };
+
     let cube = Object {
         transform: Transform::new(Vec3::Z_AXIS * 5.0, Quat::IDENTITY, Vec3::IDENTITY),
-        mesh: Mesh {
+        mesh: Rc::new(Mesh {
             positions,
             colors: Some(colors),
             normals: None,
-            uvs: None,
+            uvs: Some(uvs),
             primitives: triangles.iter().map(|&[a,b,c]| Primitive::Triangle(a, b, c)).collect()
-        },
-        material: &Material { shader: &ColorShader },
+        }),
+        material: Rc::new(Material { shader: Rc::new(shader) }),
     };
 
     let scene = Scene { objects: vec![cube] };
@@ -228,7 +256,7 @@ fn get_cube_scene<'a>() -> Scene<'a> {
 }
 
 
-fn get_tri_scene<'a>() -> Scene<'a> {
+fn get_tri_scene() -> Scene {
     let triangles: &[[u32;3]] = &[
         [0, 2, 1],
     ];
@@ -245,16 +273,33 @@ fn get_tri_scene<'a>() -> Scene<'a> {
         Color::BLUE,
     ];
 
+    let uvs = vec![
+        Vec2::new(0.0, 0.0),
+        Vec2::new(1.0, 0.0),
+        Vec2::new(1.0, 1.0),
+    ];
+
+    let texture = texture::Texture::new(
+        vec![
+            Color::WHITE, Color::RED,
+            Color::RED, Color::WHITE,
+        ],
+        2,
+        2,
+        texture::TextureFilter::Nearest,
+        texture::TextureWrap::Repeat
+    );
+
     let cube = Object {
         transform: Transform::new(Vec3::Z_AXIS * 2.5, Quat::from_axis_angle(Vec3::Y_AXIS, 35f32.to_radians()), Vec3::IDENTITY),
-        mesh: Mesh {
+        mesh: Rc::new(Mesh {
             positions,
             colors: Some(colors),
             normals: None,
-            uvs: None,
+            uvs: Some(uvs),
             primitives: triangles.iter().map(|&[a,b,c]| Primitive::Triangle(a, b, c)).collect()
-        },
-        material: &Material { shader: &ColorShader },
+        }),
+        material: Rc::new(Material { shader: Rc::new(TextureShader{texture: Some(texture)}) }),
     };
 
     let scene = Scene { objects: vec![cube] };

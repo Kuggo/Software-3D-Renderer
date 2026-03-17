@@ -1,4 +1,5 @@
 use std::ops::Sub;
+use std::rc::Rc;
 use crate::shader::{Material, BaseShader};
 use crate::utils::*;
 
@@ -49,15 +50,15 @@ pub enum Primitive {
 // Objects and Scene
 
 /// A Scene is a collection of objects.
-pub struct Scene<'a> {
-    pub objects: Vec<Object<'a>>,
+pub struct Scene {
+    pub objects: Vec<Object>,
 }
 
 /// An Object is an instance of a mesh with a specific transform (position, rotation, scale).
-pub struct Object<'a> {
+pub struct Object {
     pub transform: Transform,
-    pub mesh: Mesh,
-    pub material: &'a Material<'a>,
+    pub mesh: Rc<Mesh>,
+    pub material: Rc<Material>,
 }
 
 /// A Mesh is a collection of primitives (triangles, lines, points) that define an object's surface,
