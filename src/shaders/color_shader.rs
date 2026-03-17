@@ -1,5 +1,5 @@
-use crate::geometry::Mesh;
-use crate::shader::{interpolate, VaryingAttributes, Shader};
+use crate::mesh::Mesh;
+use crate::shader::{interpolate_mesh_attribute, VaryingAttributes, Shader};
 use crate::utils::Color;
 
 
@@ -9,7 +9,7 @@ pub struct ColorVarying {
 impl VaryingAttributes for ColorVarying {
     fn calculate(mesh: &Mesh, indices: &[u32], weights: &[f32]) -> Self {
         let colors = mesh.colors.as_ref().unwrap();
-        let color = interpolate(colors, indices, weights);
+        let color = interpolate_mesh_attribute(colors, indices, weights);
         Self { color }
     }
     

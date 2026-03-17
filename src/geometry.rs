@@ -1,5 +1,6 @@
 use std::ops::Sub;
 use std::rc::Rc;
+use crate::mesh::Mesh;
 use crate::shader::{Material, BaseShader};
 use crate::utils::*;
 
@@ -36,16 +37,6 @@ impl Plane {
 }
 
 
-/// Primitives are the basic geometric shapes that make up a mesh.
-/// Currently only triangles are supported, but lines and points could be added in the future.
-#[derive(Debug, Copy, PartialEq, Clone)]
-pub enum Primitive {
-    Point(u32),     // Single vertex (point)
-    Line(u32, u32), // Two vertices (line)
-    Triangle(u32, u32, u32), // Three vertices (triangle)
-}
-
-
 
 // Objects and Scene
 
@@ -61,15 +52,6 @@ pub struct Object {
     pub material: Rc<Material>,
 }
 
-/// A Mesh is a collection of primitives (triangles, lines, points) that define an object's surface,
-/// and their attributes
-pub struct Mesh {
-    pub primitives: Vec<Primitive>,
-    pub positions: Vec<Vec3>,
-    pub colors: Option<Vec<Color>>,
-    pub normals: Option<Vec<Vec3>>,
-    pub uvs: Option<Vec<Vec2>>,
-}
 
 /// A Transform represents the position, rotation, and scale of an object in 3D space.
 /// It can be chained together to combine multiple transformations.

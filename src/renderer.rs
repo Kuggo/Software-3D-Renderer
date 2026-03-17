@@ -1,5 +1,6 @@
 use crate::{Camera, Screen};
 use crate::geometry::*;
+use crate::mesh::{Mesh, Primitive};
 use crate::shader::{BaseShader};
 use crate::utils::{fp_equals, Pixel, Vec2, Vec3, FP_TOLERANCE};
 

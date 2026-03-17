@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::ops;
 use std::rc::Rc;
-use crate::geometry::{Mesh, Primitive};
+use crate::mesh::Mesh;
 use crate::utils::{Color, Vec2, Vec3};
 
 
@@ -58,11 +58,20 @@ pub trait Shader {
 
 
 
-pub fn interpolate<T>(attribute: &[T], verts: &[u32], weights: &[f32]) -> T
+pub fn interpolate_mesh_attribute<T>(attribute: &[T], verts: &[u32], weights: &[f32]) -> T
 where T: ops::Add<T, Output = T> + ops::Mul<f32, Output = T> + Copy, {
     let mut sum = attribute[verts[0] as usize] * weights[0];
     for i in 1..verts.len() {
         sum = sum + attribute[verts[i] as usize] * weights[i];
+    }
+    sum
+}
+
+pub fn interpolate<T>(attribute: &[T], weights: &[f32]) -> T
+where T: ops::Add<T, Output = T> + ops::Mul<f32, Output = T> + Copy, {
+    let mut sum = attribute[0] * weights[0];
+    for i in 1..weights.len() {
+        sum = sum + attribute[i] * weights[i];
     }
     sum
 }

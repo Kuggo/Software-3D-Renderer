@@ -1,6 +1,6 @@
 use std::any::Any;
-use crate::geometry::Mesh;
-use crate::shader::{interpolate, VaryingAttributes, Shader};
+use crate::mesh::Mesh;
+use crate::shader::{interpolate_mesh_attribute, VaryingAttributes, Shader};
 use crate::texture::Texture;
 use crate::utils::{Color, Vec2};
 
@@ -10,7 +10,7 @@ pub struct TextureInput {
 impl VaryingAttributes for TextureInput {
     fn calculate(mesh: &Mesh, indices: &[u32], weights: &[f32]) -> Self {
         let uvs = mesh.uvs.as_ref().unwrap();
-        let uv = interpolate(uvs, indices, weights);
+        let uv = interpolate_mesh_attribute(uvs, indices, weights);
         Self { uv }
     }
 

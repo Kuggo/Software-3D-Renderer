@@ -460,6 +460,12 @@ impl Color {
             a: a as f32 / 255.0
         }
     }
+    
+    /// Create a new color from a gray scale value and an alpha value, both in the range [0, 255].
+    pub fn from_gray_scale(gray: u8, a: u8) -> Color {
+        let g = gray as f32 / 255.0;
+        Color { r: g, g: g, b: g, a: a as f32 / 255.0 }
+    }
 
     /// Create a new color from sdl2::pixels::Color, which has RGBA values in the range [0, 255].
     pub fn from_sdl(color: sdl2::pixels::Color) -> Color {

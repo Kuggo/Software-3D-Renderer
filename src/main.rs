@@ -15,12 +15,14 @@ mod renderer;
 mod shader;
 mod shaders;
 mod texture;
+mod mesh;
 
 pub use crate::camera::{Camera, Screen};
-use crate::geometry::{Mesh, Object, Primitive, Scene, Transform};
+use crate::geometry::{Object, Scene, Transform};
+use crate::mesh::{Mesh, Primitive};
 use crate::renderer::{CullMode, DepthTest, InterpMode, RenderMode, Renderer};
 use crate::shader::{Material};
-use crate::shaders::{ColorShader, PhongShader, TextureShader};
+use crate::shaders::{ColorShader, FlatShader, GouraudShader, PhongShader, SmoothShader, TextureShader};
 
 /// ControlSettings holds the various sensitivity and speed settings for the controls.
 struct ControlSettings {
@@ -307,13 +309,27 @@ fn get_tri_scene() -> Scene {
 }
 
 
+fn get_teapot_scene() -> Scene {
+    let mesh = Mesh::parse_obj("src/meshes/utah_teapot_lowres.obj").unwrap();
+
+    let teapot = Object {
+        transform: Transform::new(Vec3::Z_AXIS * 5.0, Quat::IDENTITY, Vec3::IDENTITY),
+        mesh: Rc::new(mesh),
+        material: Rc::new(Material { shader: Rc::new(SmoothShader) }),
+    };
+
+    let scene = Scene { objects: vec![teapot] };
+    scene
+}
+
+
 /// Initializes the SDL context, creates a window to which a camera outputs to
 fn main() -> Result<(), String> {
     // initial states and setup constants
-    const SCREEN_WIDTH_PIX: u32 = 128;
-    const SCREEN_HEIGHT_PIX: u32 = 72;
+    const SCREEN_WIDTH_PIX: u32 = 1280;
+    const SCREEN_HEIGHT_PIX: u32 = 720;
     const PIXELS_PER_UNIT: f32 = 200.0;
-    const PIXEL_SIZE: u32 = 20;
+    const PIXEL_SIZE: u32 = 2;
     let target_fps: f32 = 30.0;
 
     let camera_pos = Vec3::ZERO;
@@ -324,7 +340,7 @@ fn main() -> Result<(), String> {
     let zoom_sensitivity: f32 = 2.0;
     let camera_speed: f32 = 2.0;
 
-    let scene = get_cube_scene();
+    let scene = get_teapot_scene();
 
     // Setup and Rendering loop
     let config = ControlSettings { mouse_sensitivity, scroll_sensitivity, zoom_sensitivity, camera_speed };
