@@ -2,7 +2,7 @@ use crate::{Camera, Screen};
 use crate::geometry::*;
 use crate::mesh::{Mesh, Primitive};
 use crate::shader::{BaseShader};
-use crate::utils::{fp_equals, Pixel, Vec2, Vec3, FP_TOLERANCE};
+use crate::utils::{fp_equals, Color, Pixel, Vec2, Vec3, FP_TOLERANCE};
 
 #[derive(Debug, Copy, Clone)]
 pub enum InterpMode {
@@ -14,6 +14,7 @@ pub enum InterpMode {
 pub enum RenderMode {
     Wireframe,
     Solid,
+    Both,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -225,7 +226,6 @@ impl Renderer {
             Vertex { pos: v1_cam, uv: Vec2::Y_AXIS },
             Vertex { pos: v2_cam, uv: Vec2::ZERO }, // third component is implicitly 1.0 - u - v
         ];
-        let interp_inv_z = [1.0 / v0_cam.z, 1.0 / v1_cam.z, 1.0 / v2_cam.z];
 
         // trivial accept
         if (ca | cb | cc) == 0 {
@@ -273,6 +273,12 @@ impl Renderer {
                 self.rasterize_line(0, 1, &face, ctx);
                 self.rasterize_line(1, 2, &face, ctx);
                 self.rasterize_line(2, 0, &face, ctx);
+            }
+            RenderMode::Both => {
+                self.debug_rasterize_line(0, 1, &Color::RED, &face, ctx);
+                self.debug_rasterize_line(1, 2, &Color::RED, &face, ctx);
+                self.debug_rasterize_line(2, 0, &Color::RED, &face, ctx);
+                self.scanline_triangle(&face, ctx);
             }
         }
     }
@@ -542,7 +548,23 @@ impl Renderer {
         // long edge is verts[0] to verts[2]
         // small edges are verts[0] to verts[1] and verts[1] to verts[2]
         let (p0, p1, p2) = (face_ctx.pixels[verts[0]], face_ctx.pixels[verts[1]], face_ctx.pixels[verts[2]]);
-        let (uv0, uv1, uv2) = (face_ctx.verts_cam[verts[0]].uv, face_ctx.verts_cam[verts[1]].uv, face_ctx.verts_cam[verts[2]].uv);
+
+        // convert the uvs from cam to screen so we consistently interpolate them on screen space
+        let (uv0, uv1, uv2) = (face_ctx.verts_cam[verts[0]].uv,
+                               face_ctx.verts_cam[verts[1]].uv, face_ctx.verts_cam[verts[2]].uv);
+
+        let uv0 = Vec2::new(
+            uv0.x * (face_ctx.og_verts_cam[0].pos.z / face_ctx.verts_cam[verts[0]].pos.z),
+            uv0.y * (face_ctx.og_verts_cam[1].pos.z / face_ctx.verts_cam[verts[0]].pos.z),
+        );
+        let uv1 = Vec2::new(
+            uv1.x * (face_ctx.og_verts_cam[0].pos.z / face_ctx.verts_cam[verts[1]].pos.z),
+            uv1.y * (face_ctx.og_verts_cam[1].pos.z / face_ctx.verts_cam[verts[1]].pos.z),
+        );
+        let uv2 = Vec2::new(
+            uv2.x * (face_ctx.og_verts_cam[0].pos.z / face_ctx.verts_cam[verts[2]].pos.z),
+            uv2.y * (face_ctx.og_verts_cam[1].pos.z / face_ctx.verts_cam[verts[2]].pos.z),
+        );
 
         let long_slope_x      = (p2.x - p0.x) as f32 / (p2.y - p0.y) as f32;
         let long_slope_uv      = (uv2 - uv0) * (1.0 / (p2.y - p0.y) as f32);
@@ -583,6 +605,28 @@ impl Renderer {
     // Line drawing
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
+    fn debug_rasterize_line(&mut self, start_idx: usize, end_idx: usize, color: &Color,
+                      face_ctx: &FaceContext, ctx: &mut RenderingContext) {
+        let (p1, p2) = (face_ctx.pixels[start_idx], face_ctx.pixels[end_idx]);
+        let dx = p2.x - p1.x;
+        let dy = p2.y - p1.y;
+        if dx == 0 && dy == 0 {
+            let uv = face_ctx.verts_cam[start_idx].uv;
+            self.debug_draw_pixel(p1, &[uv.x, uv.y, 1.0 - uv.x - uv.y], color, face_ctx, ctx);
+            return;
+        }
+
+        let steps = dx.abs().max(dy.abs());
+        let slope = Vec2::new(dx as f32, dy as f32);
+        for i in 0..=steps {
+            let t = i as f32 / steps as f32;
+            let p = p1.add(&Pixel::from_vec2(&(slope * t)));
+            let uv = Vec2::lerp(&face_ctx.verts_cam[start_idx].uv, &face_ctx.verts_cam[end_idx].uv, t);
+            self.debug_draw_pixel(p, &[uv.x, uv.y, 1.0 - uv.x - uv.y], color, face_ctx, ctx);
+        }
+    }
+
+
     /// Rasterizes a line by filling in the color of every pixel it covers onto the screen.
     fn rasterize_line(&mut self, start_idx: usize, end_idx: usize,
                       face_ctx: &FaceContext, ctx: &mut RenderingContext) {
@@ -596,7 +640,8 @@ impl Renderer {
         }
 
         if dy == 0 {    // screen can already handle horizontal spans, so we can optimize for that case
-            self.draw_hline(p1.y, p1.x, p2.x, face_ctx.verts_cam[0].uv, face_ctx.verts_cam[1].uv, face_ctx, ctx);
+            self.draw_hline(p1.y, p1.x, p2.x, face_ctx.verts_cam[start_idx].uv,
+                            face_ctx.verts_cam[end_idx].uv, face_ctx, ctx);
             return;
         }
 
@@ -640,6 +685,16 @@ impl Renderer {
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Pixel drawing and depth testing
     ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    fn debug_draw_pixel(&mut self, p: Pixel, bary: &[f32], color: &Color, face_ctx: &FaceContext, ctx: &mut RenderingContext) {
+        let idx = ((self.zbuffer_res.0 as i32) * (p.y) + (p.x)) as usize;
+        let z = self.interpolate_depth(face_ctx, bary) - 0.1;
+        if self.depth_test.test(z, self.zbuffer[idx]) {
+            self.zbuffer[idx] = z;
+            ctx.screen.fast_draw_pixel(idx, &color);
+        }
+    }
+
 
     /// Draws a pixel on the screen if it passes the depth test.
     /// The color of the pixel is determined by the shader function in the rendering context, which takes the vertex attributes as input.

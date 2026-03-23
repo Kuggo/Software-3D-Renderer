@@ -25,7 +25,7 @@ impl Shader for FlatShader {
 
     fn shade(&self, input: &FlatVaryings) -> Color {
         // For now, just return a color based on the normal and uv for testing.
-        let gray_scale = ((input.normal.z * 0.5 + 0.5) * 255.0) as u8;
+        let gray_scale = ((input.normal.z * -0.5 + 0.5) * 255.0) as u8;
         Color::new(gray_scale, gray_scale, gray_scale, 255)
     }
 }

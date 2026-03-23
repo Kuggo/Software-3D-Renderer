@@ -11,7 +11,7 @@ impl VaryingAttributes for GouraudVaryings {
         let normals = mesh.normals.as_ref().unwrap().as_slice();
         
         fn to_gray(normal: Vec3) -> Color {
-            let gray_scale = ((normal.z * 0.5 + 0.5) * 255.0) as u8;
+            let gray_scale = ((normal.z * -0.5 + 0.5) * 255.0) as u8;
             Color::new(gray_scale, gray_scale, gray_scale, 255)
         }
         

@@ -206,13 +206,13 @@ fn get_cube_scene() -> Scene {
 
     let uvs = vec![
         Vec2::new(0.0, 0.0),
-        Vec2::new(1.0, 0.0),
-        Vec2::new(1.0, 1.0),
-        Vec2::new(0.0, 1.0),
+        Vec2::new(4.0, 0.0),
+        Vec2::new(4.0, 4.0),
+        Vec2::new(0.0, 4.0),
         Vec2::new(0.0, 0.0),
-        Vec2::new(1.0, 0.0),
-        Vec2::new(1.0, 1.0),
-        Vec2::new(0.0, 1.0),
+        Vec2::new(4.0, 0.0),
+        Vec2::new(4.0, 4.0),
+        Vec2::new(0.0, 4.0),
     ];
 
     let colors = vec![
@@ -228,18 +228,17 @@ fn get_cube_scene() -> Scene {
 
     let checker_texture = texture::Texture::new(
         vec![
-            Color::WHITE, Color::RED, Color::WHITE, Color::GREEN,
-            Color::RED, Color::WHITE, Color::GREEN, Color::WHITE,
-            Color::WHITE, Color::GREEN, Color::WHITE, Color::BLUE,
-            Color::GREEN, Color::WHITE, Color::BLUE, Color::WHITE,
+            Color::WHITE, Color::GREEN,
+            Color::BLUE, Color::WHITE,
         ],
-        4,
-        4,
+        2,
+        2,
         texture::TextureFilter::Nearest,
         texture::TextureWrap::Repeat
     );
 
     let shader = TextureShader { texture: Some(checker_texture) };
+    //let shader = ColorShader;
 
     let cube = Object {
         transform: Transform::new(Vec3::Z_AXIS * 5.0, Quat::IDENTITY, Vec3::IDENTITY),
@@ -315,7 +314,7 @@ fn get_teapot_scene() -> Scene {
     let teapot = Object {
         transform: Transform::new(Vec3::Z_AXIS * 5.0, Quat::IDENTITY, Vec3::IDENTITY),
         mesh: Rc::new(mesh),
-        material: Rc::new(Material { shader: Rc::new(SmoothShader) }),
+        material: Rc::new(Material { shader: Rc::new(FlatShader) }),
     };
 
     let scene = Scene { objects: vec![teapot] };
@@ -340,7 +339,7 @@ fn main() -> Result<(), String> {
     let zoom_sensitivity: f32 = 2.0;
     let camera_speed: f32 = 2.0;
 
-    let scene = get_teapot_scene();
+    let scene = get_cube_scene();
 
     // Setup and Rendering loop
     let config = ControlSettings { mouse_sensitivity, scroll_sensitivity, zoom_sensitivity, camera_speed };
@@ -349,7 +348,7 @@ fn main() -> Result<(), String> {
     let mut screen = &mut Screen::new(&mut sdl_ctx, SCREEN_WIDTH_PIX, SCREEN_HEIGHT_PIX, PIXEL_SIZE, PIXELS_PER_UNIT, "3D Renderer")?;
     let cam_transform = Transform::new(camera_pos, Quat::IDENTITY, Vec3::IDENTITY);
     let mut camera = Camera::new(scene, cam_transform, fov);
-    let mut renderer = Renderer::new(&screen, InterpMode::DepthCorrect, CullMode::Backface, RenderMode::Solid, DepthTest::Less);
+    let mut renderer = Renderer::new(&screen, InterpMode::DepthCorrect, CullMode::Backface, RenderMode::Both, DepthTest::Less);
 
     let mut key_states: Keys = [false; 256];
 
