@@ -1,30 +1,31 @@
+use std::cmp::PartialEq;
 use crate::{Camera, Screen};
 use crate::geometry::*;
 use crate::mesh::{Mesh, Primitive};
 use crate::shader::{BaseShader};
 use crate::utils::{fp_equals, Color, Pixel, Vec2, Vec3, FP_TOLERANCE};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum InterpMode {
     Linear,
     DepthCorrect,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum RenderMode {
     Wireframe,
     Solid,
     Both,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum CullMode {
     None,
     Backface,
     Frontface,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum DepthTest {
     None,
     Fail,
@@ -234,12 +235,26 @@ impl Renderer {
         }
 
         // otherwise clip
-        let clipped_verts = self.clip_triangle(&verts); // create a convex polygon
+        let mut clipped_verts = self.clip_triangle(&verts); // create a convex polygon
         if clipped_verts.is_empty() {
             return; // not a valid triangle anymore, so we can skip rasterization
         }
+
+        if self.interpolation_mode == InterpMode::DepthCorrect {
+            self.convert_poly_bary_cam_to_screen(&mut clipped_verts, &verts);
+        }
+
         for clipped_tri in self.triangulate(&clipped_verts) {
             self.process_triangle(original_tri, &verts, &clipped_tri, ctx);
+        }
+    }
+
+    fn convert_poly_bary_cam_to_screen(&self, poly: &mut [Vertex], og_verts: &[Vertex]) {
+        for v in poly.iter_mut() {
+            v.uv = Vec2::new(
+                (v.uv.x * og_verts[0].pos.z) / v.pos.z,
+                (v.uv.y * og_verts[1].pos.z) / v.pos.z
+            );
         }
     }
 
@@ -298,7 +313,7 @@ impl Renderer {
             Vertex { pos: cam_v1, uv: Vec2::X_AXIS },
             Vertex { pos: cam_v2, uv: Vec2::Y_AXIS }
         ];
-        if let Some([clipped_v1, clipped_v2]) = self.clip_line_segment(&endpoints) {
+        if let Some([mut clipped_v1, mut clipped_v2]) = self.clip_line_segment(&endpoints) {
             let sa = self.perspective_project(&clipped_v1.pos);
             let sb = self.perspective_project(&clipped_v2.pos);
 
@@ -306,6 +321,13 @@ impl Renderer {
             let pb = ctx.screen.world_to_screen_coords(sb);
 
             assert!(ctx.screen.in_bounds(pa.x, pa.y) && ctx.screen.in_bounds(pb.x, pb.y));
+
+            if self.interpolation_mode == InterpMode::DepthCorrect {
+                let mut verts = [clipped_v1, clipped_v2];
+                self.convert_poly_bary_cam_to_screen(&mut verts, &endpoints);
+                clipped_v1.uv = verts[0].uv;
+                clipped_v2.uv = verts[1].uv;
+            }
 
             let face = FaceContext {
                 pixels: &[pa, pb],
@@ -547,24 +569,11 @@ impl Renderer {
         verts.sort_by_key(|&i| {face_ctx.pixels[i].y});
         // long edge is verts[0] to verts[2]
         // small edges are verts[0] to verts[1] and verts[1] to verts[2]
-        let (p0, p1, p2) = (face_ctx.pixels[verts[0]], face_ctx.pixels[verts[1]], face_ctx.pixels[verts[2]]);
+        let (p0, p1, p2) = (
+            face_ctx.pixels[verts[0]], face_ctx.pixels[verts[1]], face_ctx.pixels[verts[2]]);
 
-        // convert the uvs from cam to screen so we consistently interpolate them on screen space
         let (uv0, uv1, uv2) = (face_ctx.verts_cam[verts[0]].uv,
                                face_ctx.verts_cam[verts[1]].uv, face_ctx.verts_cam[verts[2]].uv);
-
-        let uv0 = Vec2::new(
-            uv0.x * (face_ctx.og_verts_cam[0].pos.z / face_ctx.verts_cam[verts[0]].pos.z),
-            uv0.y * (face_ctx.og_verts_cam[1].pos.z / face_ctx.verts_cam[verts[0]].pos.z),
-        );
-        let uv1 = Vec2::new(
-            uv1.x * (face_ctx.og_verts_cam[0].pos.z / face_ctx.verts_cam[verts[1]].pos.z),
-            uv1.y * (face_ctx.og_verts_cam[1].pos.z / face_ctx.verts_cam[verts[1]].pos.z),
-        );
-        let uv2 = Vec2::new(
-            uv2.x * (face_ctx.og_verts_cam[0].pos.z / face_ctx.verts_cam[verts[2]].pos.z),
-            uv2.y * (face_ctx.og_verts_cam[1].pos.z / face_ctx.verts_cam[verts[2]].pos.z),
-        );
 
         let long_slope_x      = (p2.x - p0.x) as f32 / (p2.y - p0.y) as f32;
         let long_slope_uv      = (uv2 - uv0) * (1.0 / (p2.y - p0.y) as f32);

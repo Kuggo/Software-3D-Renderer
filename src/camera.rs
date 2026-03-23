@@ -193,12 +193,12 @@ impl Camera {
         let right = yaw_q.rotate_vec3(Vec3::X_AXIS);
         let pitch_q = Quat::from_axis_angle(right, self.pitch.to_radians());
 
-        let quat = pitch_q.mul(&yaw_q);
+        let quat = pitch_q* yaw_q;
 
         let forward = quat.rotate_vec3(Vec3::Z_AXIS);
         let roll_q = Quat::from_axis_angle(forward, self.roll.to_radians());
 
-        self.transform.rot = roll_q.mul(&quat).normalize();
+        self.transform.rot = (roll_q * quat).normalize();
     }
 
     /// Moves the camera in a direction relative to where it's currently facing.

@@ -20,6 +20,7 @@ impl VaryingAttributes for SmoothVaryings {
 pub struct SmoothShader;
 impl Shader for SmoothShader {
     type Input = SmoothVaryings;
+    type Uniforms = ();
 
     fn shade(&self, input: &SmoothVaryings) -> Color {
         // For now, just return a color based on the normal and uv for testing.

@@ -1,6 +1,6 @@
 use std::cmp::PartialEq;
 use std::ops;
-use std::ops::Sub;
+use std::ops::{Mul, Sub};
 use crate::geometry::lerp;
 
 pub const FP_TOLERANCE: f32 = 1e-6;
@@ -376,17 +376,6 @@ impl Quat {
         }
     }
 
-    /// Quaternion multiplication is composition of rotations.
-    /// The resulting rotation is equivalent to applying `other` first, then `self`.
-    pub fn mul(&self, other: &Quat) -> Quat {
-        let angle = self.cos_a2 * other.cos_a2 - self.axis_sin_a2.dot(&other.axis_sin_a2);
-
-        let axis = other.axis_sin_a2 * self.cos_a2 + 
-            self.axis_sin_a2 * other.cos_a2 + 
-            self.axis_sin_a2.cross(&other.axis_sin_a2);
-
-        Quat { cos_a2: angle, axis_sin_a2: axis }
-    }
 
     /// The conjugate of a quaternion represents the inverse rotation.
     /// For unit quaternions, the conjugate is also the inverse.
@@ -434,6 +423,22 @@ impl Quat {
     }
 
 }
+impl Mul for Quat {
+    type Output = Quat;
+
+    /// Quaternion multiplication is composition of rotations.
+    /// The resulting rotation is equivalent to applying `other` first, then `self`.
+    fn mul(self, rhs: Self) -> Self::Output {
+        let angle = self.cos_a2 * rhs.cos_a2 - self.axis_sin_a2.dot(&rhs.axis_sin_a2);
+
+        let axis = rhs.axis_sin_a2 * self.cos_a2 +
+            self.axis_sin_a2 * rhs.cos_a2 +
+            self.axis_sin_a2.cross(&rhs.axis_sin_a2);
+
+        Quat { cos_a2: angle, axis_sin_a2: axis }
+    }
+}
+
 
 
 /// A simple RGBA color struct with values in the range [0.0, 1.0].

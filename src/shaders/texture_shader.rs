@@ -26,19 +26,14 @@ pub struct TextureShader {
 }
 impl<'a> Shader for TextureShader {
     type Input = TextureInput;
+    type Uniforms = Texture<Color>;
 
     fn shade(&self, input: &TextureInput) -> Color {
         let texture = self.texture.as_ref().unwrap();
         texture.sample(input.uv.x, input.uv.y)
     }
 
-    fn assign_uniforms(&mut self, uniforms: &dyn Any) -> bool {
-        if let Some(texture) = uniforms.downcast_ref::<Texture<Color>>() {
-            self.texture = Some(texture.clone());
-            true
-        }
-        else {
-            false
-        }
+    fn assign_uniforms(&mut self, uniforms: &Self::Uniforms) {
+        self.texture = Some(uniforms.clone());
     }
 }

@@ -1,5 +1,6 @@
-use std::ops::Index;
+use std::ops::{Index, Mul};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -249,10 +250,23 @@ fn get_cube_scene() -> Scene {
             uvs: Some(uvs),
             primitives: triangles.iter().map(|&[a,b,c]| Primitive::Triangle(a, b, c)).collect()
         }),
-        material: Rc::new(Material { shader: Rc::new(shader) }),
+        material: Box::new(Material { shader: Box::new(shader) }),
     };
 
-    let scene = Scene { objects: vec![cube] };
+    let mut scene = Scene { objects: vec![cube] };
+
+    let checker_texture = texture::Texture::new(
+        vec![
+            Color::WHITE, Color::BLUE,
+            Color::GREEN, Color::WHITE,
+        ],
+        2,
+        2,
+        texture::TextureFilter::Nearest,
+        texture::TextureWrap::Repeat
+    );
+
+    scene.objects[0].material.shader.assign_uniforms(&Some(checker_texture));
     scene
 }
 
@@ -300,7 +314,7 @@ fn get_tri_scene() -> Scene {
             uvs: Some(uvs),
             primitives: triangles.iter().map(|&[a,b,c]| Primitive::Triangle(a, b, c)).collect()
         }),
-        material: Rc::new(Material { shader: Rc::new(TextureShader{texture: Some(texture)}) }),
+        material: Box::new(Material { shader: Box::new(TextureShader{texture: Some(texture)}) }),
     };
 
     let scene = Scene { objects: vec![cube] };
@@ -314,11 +328,49 @@ fn get_teapot_scene() -> Scene {
     let teapot = Object {
         transform: Transform::new(Vec3::Z_AXIS * 5.0, Quat::IDENTITY, Vec3::IDENTITY),
         mesh: Rc::new(mesh),
-        material: Rc::new(Material { shader: Rc::new(FlatShader) }),
+        material: Box::new(Material { shader: Box::new(FlatShader) }),
     };
 
     let scene = Scene { objects: vec![teapot] };
     scene
+}
+
+/// Updates all objects in the scene before rendering the next frame.
+/// Here is where all the world logic should be done.
+fn update_scene(camera: &mut Camera, dt: f32, key_states: &Keys) {
+    let scene = &mut camera.scene;
+    for obj in &mut scene.objects {
+        obj.transform.rot = obj.transform.rot * Quat::from_axis_angle(Vec3::Y_AXIS, 20.0f32.to_radians() * dt);
+    }
+
+    if key_states[Key::MouseLeft] {
+        let checker_texture = texture::Texture::new(
+            vec![
+                Color::WHITE, Color::BLUE,
+                Color::GREEN, Color::WHITE,
+            ],
+            2,
+            2,
+            texture::TextureFilter::Nearest,
+            texture::TextureWrap::Repeat
+        );
+
+        scene.objects[0].material.shader.assign_uniforms(&checker_texture);
+    }
+    else {
+        let checker_texture = texture::Texture::new(
+            vec![
+                Color::WHITE, Color::GREEN,
+                Color::BLUE, Color::WHITE,
+            ],
+            2,
+            2,
+            texture::TextureFilter::Nearest,
+            texture::TextureWrap::Repeat
+        );
+
+        camera.scene.objects[0].material.shader.assign_uniforms(&checker_texture);
+    }
 }
 
 
@@ -358,6 +410,8 @@ fn main() -> Result<(), String> {
     let mut dt = target_dt.as_secs_f32();
     loop {
         let frame_start = Instant::now();
+
+        update_scene(&mut camera, dt, &key_states);
 
         // rendering
         screen = camera.draw_frame_to_screen(screen, &mut renderer);

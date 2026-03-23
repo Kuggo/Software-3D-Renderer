@@ -49,7 +49,7 @@ pub struct Scene {
 pub struct Object {
     pub transform: Transform,
     pub mesh: Rc<Mesh>,
-    pub material: Rc<Material>,
+    pub material: Box<Material>,
 }
 
 
@@ -105,7 +105,7 @@ impl Transform {
 
         let pos = self.pos + rotated;
 
-        let rot = self.rot.mul(&local.rot);
+        let rot = self.rot * local.rot;
 
         let scale = self.scale.scale_vec(&local.scale);
 

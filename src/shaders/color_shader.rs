@@ -22,6 +22,7 @@ impl VaryingAttributes for ColorVarying {
 pub struct ColorShader;
 impl Shader for ColorShader {
     type Input = ColorVarying;
+    type Uniforms = ();
 
     fn shade(&self, input: &ColorVarying) -> Color {
         input.color

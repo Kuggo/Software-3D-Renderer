@@ -22,6 +22,7 @@ impl VaryingAttributes for PhongVaryings {
 pub struct PhongShader;
 impl Shader for PhongShader {
     type Input = PhongVaryings;
+    type Uniforms = ();
 
     fn shade(&self, input: &PhongVaryings) -> Color {
         // For now, just return a color based on the normal and uv for testing.

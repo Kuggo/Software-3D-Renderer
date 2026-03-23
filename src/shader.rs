@@ -6,7 +6,7 @@ use crate::utils::{Color, Vec2, Vec3};
 
 
 pub struct Material {
-    pub shader: Rc<dyn BaseShader>,
+    pub shader: Box<dyn BaseShader>,
 }
 
 
@@ -41,18 +41,25 @@ where T: Shader, {
     }
 
     fn assign_uniforms(&mut self, uniforms: &dyn Any) -> bool {
-        T::assign_uniforms(self, uniforms)
+        if let Some(unif) = uniforms.downcast_ref::<T::Uniforms>() {
+            T::assign_uniforms(self, unif);
+            true
+        }
+        else {
+            false
+        }
+
     }
 }
 
 pub trait Shader {
     type Input: VaryingAttributes;
+    type Uniforms: 'static;
 
     fn shade(&self, input: &Self::Input) -> Color;
 
-    fn assign_uniforms(&mut self, uniforms: &dyn Any) -> bool {
+    fn assign_uniforms(&mut self, uniforms: &Self::Uniforms) {
         // Default implementation does nothing, but specific shaders can override this to assign uniform values.
-        true
     }
 }
 

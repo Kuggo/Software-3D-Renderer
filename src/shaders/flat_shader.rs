@@ -22,6 +22,7 @@ impl VaryingAttributes for FlatVaryings {
 pub struct FlatShader;
 impl Shader for FlatShader {
     type Input = FlatVaryings;
+    type Uniforms = ();
 
     fn shade(&self, input: &FlatVaryings) -> Color {
         // For now, just return a color based on the normal and uv for testing.

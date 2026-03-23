@@ -29,6 +29,7 @@ impl VaryingAttributes for GouraudVaryings {
 pub struct GouraudShader;
 impl Shader for GouraudShader {
     type Input = GouraudVaryings;
+    type Uniforms = ();
 
     fn shade(&self, input: &GouraudVaryings) -> Color {
         input.color
