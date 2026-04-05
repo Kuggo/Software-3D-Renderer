@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 sdl2 = "*"
 bytemuck = "1.25.0"
+once_cell = "*"

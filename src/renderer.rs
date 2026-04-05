@@ -1,6 +1,7 @@
 use std::cmp::PartialEq;
 use crate::{Camera, Screen};
 use crate::geometry::*;
+use crate::logger::Logger;
 use crate::mesh::{Mesh, Primitive};
 use crate::shader::{BaseShader};
 use crate::utils::{fp_equals, Color, Pixel, Vec2, Vec3, FP_TOLERANCE};
@@ -159,12 +160,13 @@ impl Renderer {
         for object in &camera.scene.objects {
             self.render_object(object, &view, screen);
         }
+        Logger::info("Finished rendering")
     }
 
     /// Renders a single object by applying the view transformation and then rasterizing its primitives.
     fn render_object(&mut self, object: &Object, view: &Transform, screen: &mut Screen) {
         if !object.material.shader.validate_mesh(&object.mesh) {
-            println!("Invalid mesh for shader, skipping object");
+            Logger::error("Invalid mesh for shader, skipping object");
             return;
         }
 
@@ -220,12 +222,12 @@ impl Renderer {
         let cb = self.compute_outcode(&v1_cam);
         let cc = self.compute_outcode(&v2_cam);
 
-        if (ca & cb & cc) != 0 { return; }// trivial reject
+        if (ca & cb & cc) != 0 { return; }  // trivial reject
 
         let verts = [
             Vertex { pos: v0_cam, uv: Vec2::X_AXIS },
             Vertex { pos: v1_cam, uv: Vec2::Y_AXIS },
-            Vertex { pos: v2_cam, uv: Vec2::ZERO }, // third component is implicitly 1.0 - u - v
+            Vertex { pos: v2_cam, uv: Vec2::ZERO   }, // third component is implicitly 1.0 - u - v
         ];
 
         // trivial accept

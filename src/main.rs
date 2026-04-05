@@ -1,6 +1,5 @@
 use std::ops::{Index, Mul};
 use std::rc::Rc;
-use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -17,9 +16,11 @@ mod shader;
 mod shaders;
 mod texture;
 mod mesh;
+mod logger;
 
 pub use crate::camera::{Camera, Screen};
 use crate::geometry::{Object, Scene, Transform};
+use crate::logger::Logger;
 use crate::mesh::{Mesh, Primitive};
 use crate::renderer::{CullMode, DepthTest, InterpMode, RenderMode, Renderer};
 use crate::shader::{Material};
@@ -406,7 +407,6 @@ fn main() -> Result<(), String> {
 
     let target_dt = Duration::from_secs_f64(1.0 / target_fps as f64);
     let mut next_frame = Instant::now();
-    let mut last_print = next_frame;
     let mut dt = target_dt.as_secs_f32();
     loop {
         let frame_start = Instant::now();
@@ -430,11 +430,8 @@ fn main() -> Result<(), String> {
             next_frame = now;
         }
 
-        if last_print.elapsed().as_secs_f32() >= 1.0 {
-            last_print = now;
-            dt = frame_start.elapsed().as_secs_f32();
-            println!("FPS: {:.1}", 1.0 / dt);
-        }
+        dt = frame_start.elapsed().as_secs_f32();
+        Logger::info(&format!("FPS: {:.0}", 1.0 / dt));
     }
     Ok(())
 }
